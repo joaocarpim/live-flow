@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8 (2026-11-24)
+
+- A aba Ambiente não mostra mais o quadro "Automatizar" (hook de pre-push e GitHub Actions). Os comandos continuam na CLI (`liveflow hook instalar`, `liveflow ci gerar`) para quem quiser.
+
 ## 0.1.7 (2026-11-24)
 
 - A aba do painel usa a logo (hexágono com o check), não mais o ícone em contorno da barra lateral. No tema escuro, a logo ganha um contorno sutil para o hexágono não sumir; o mesmo vale para o cabeçalho do painel.

@@ -496,11 +496,7 @@
             seg.length ? h('div', { class: 'lista' }, seg.map((s) => h('div', { class: 'linha' }, s.definido ? svg(I.ok, 'var(--verde)') : svg(I.x, 'var(--vermelho)'), h('span', { class: 'm', style: 'flex:1' }, s.nome), h('button', { class: 'btn peq', onclick: () => enviar({ tipo: 'definirSegredo', nome: s.nome }) }, s.definido ? 'Trocar' : 'Definir')))) : h('div', { class: 'mudo peq' }, 'O artefato não usa {{segredo:...}}.')),
           h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'Serviços por bloco')),
             a.sistema.servicos.length ? h('div', { class: 'lista' }, a.sistema.servicos.map((s) => h('div', { class: 'linha peq' }, h('b', {}, s.nome), h('span', { class: 'm mudo', style: 'flex:1' }, s.iniciar), s.repo ? h('span', { class: 'chip' }, s.repo) : null))) : h('div', { class: 'peq amb-txt' }, 'Sem "iniciar"/"servicos": o liveflow só testa a branch do seu checkout atual.'),
-            h('div', { class: 'grade', style: 'margin-top:12px' }, 'Endereço', h('span', { class: 'm' }, a.sistema.url), 'Permitidos', a.sistema.permitidos.join(', '), 'Produção', a.sistema.producao.join(', ') || '—', 'Base', a.sistema.base)),
-          h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'Automatizar')),
-            h('div', { class: 'lista' },
-              h('div', { class: 'linha' }, h('div', { style: 'flex:1' }, h('div', { style: 'font-weight:500' }, 'Antes de cada push'), h('div', { class: 'peq mudo' }, 'roda os cards da branch no modo rápido')), h('button', { class: 'btn peq', onclick: () => enviar({ tipo: 'acao', qual: 'hook' }) }, 'Instalar hook')),
-              h('div', { class: 'linha' }, h('div', { style: 'flex:1' }, h('div', { style: 'font-weight:500' }, 'GitHub Actions'), h('div', { class: 'peq mudo' }, 'cards da branch no PR e regressão dos entregues toda noite')), h('button', { class: 'btn peq', onclick: () => enviar({ tipo: 'acao', qual: 'ci' }) }, 'Gerar workflow')))))),
+            h('div', { class: 'grade', style: 'margin-top:12px' }, 'Endereço', h('span', { class: 'm' }, a.sistema.url), 'Permitidos', a.sistema.permitidos.join(', '), 'Produção', a.sistema.producao.join(', ') || '—', 'Base', a.sistema.base)))),
     ];
   }
 

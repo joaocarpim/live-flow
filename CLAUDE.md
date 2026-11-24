@@ -87,7 +87,7 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 
 ## Comandos de desenvolvimento
 
-- `npm test`: 67 testes (git real com branch local e remota, dois repositórios, app subindo por branch, Mailpit falso).
+- `npm test`: 71 testes (git real com branch local e remota, dois repositórios, app subindo por branch, Mailpit falso).
 - `LIVEFLOW_PW_NODE_MODULES=/caminho/node_modules npm test`: inclui os 3 testes com navegador de verdade (duas pessoas, foto, celular, e-mail, sessão reaproveitada, sugestão de texto, gravador).
 - `npm run typecheck`, `npm run build` (gera `dist/`; roda sozinho no `prepare` ao instalar pelo GitHub).
 - Extensão: `cd extensao && node build.mjs` e `npx --prefix .. vsce package --no-dependencies` (publisher no Marketplace: `JooVitorAparecidoCarpimdeSouza`).

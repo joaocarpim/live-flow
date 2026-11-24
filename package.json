@@ -1,6 +1,6 @@
 {
   "name": "liveflow",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Testa o fluxo de tela de cada card, em blocos, antes de entregar. Determinístico: a IA escreve, o liveflow executa.",
   "type": "module",
   "license": "MIT",

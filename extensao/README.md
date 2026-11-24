@@ -13,7 +13,7 @@ Cada card do `.liveflow/cards.yaml` tem os critérios de aceite e um passo a pas
 - **Blocos:** como os cards vão rodar (um app por branch, dependências, paralelo seguro) e o modo.
 - **Execução ao vivo:** com um card, a tela do app aparece dentro do painel, passo a passo. Com vários, o progresso de cada um e a tentativa (1, 2 ou 3 de 3).
 - **Problema:** falha confirmada, o que existe parecido na tela quando o texto mudou, print, trace e **Resolver com Claude**.
-- **Criar artefato** com os cards do seu quadro (o Claude escreve o passo a passo), **Ambiente** (segredos no cofre do VS Code, hook de pre-push, GitHub Actions) e **Histórico** com quarentena de testes instáveis.
+- **Criar artefato** com os cards do seu quadro (o Claude escreve o passo a passo), **Ambiente** (o que falta para testar e segredos no cofre do VS Code) e **Histórico** com quarentena de testes instáveis.
 
 ![Lista de cards](https://raw.githubusercontent.com/joaocarpim/live-flow/main/docs/imagens/01-cards.png)
 

@@ -55,7 +55,7 @@ Cole os cards do seu quadro (id, título, critérios, branch) e clique em **Gera
 <img src="imagens/08-criar.png" alt="Criar artefato">
 
 ### Ambiente e Histórico
-O que falta (com o comando que resolve), segredos, serviços, hook e GitHub Actions. Histórico por card e quarentena.
+O que falta (com o comando que resolve), segredos e serviços. Histórico por card e quarentena.
 
 <img src="imagens/09-ambiente.png" alt="Ambiente">
 <img src="imagens/10-historico.png" alt="Histórico">
