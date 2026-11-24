@@ -32,13 +32,13 @@ on:
   workflow_dispatch:
 jobs:
   cards:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # o Playwright precisa de uma versão de Ubuntu que ele suporta
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

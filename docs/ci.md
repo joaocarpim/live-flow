@@ -12,11 +12,11 @@ on:
     - cron: '17 6 * * *'     # regressão toda noite
 jobs:
   cards:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # use uma versão de Ubuntu suportada pelo seu Playwright
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { fetch-depth: 0 }          # as branches precisam existir
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - run: npm ci && npx playwright install --with-deps chromium
       - uses: joaocarpim/live-flow@main
@@ -35,6 +35,8 @@ jobs:
 | `regressao` | `false` | `true` roda os cards entregues no código da base |
 | `modo` | `rapido` | `rapido`, `completo` ou `noturno` |
 | `junit` | `liveflow-junit.xml` | caminho do relatório JUnit |
+
+> **Atenção ao sistema do runner.** O `ubuntu-latest` passou a ser o Ubuntu 26.04, e o Playwright 1.57 não instala o navegador nele. Fixe `ubuntu-24.04` ou use um Playwright que suporte a versão nova.
 
 ## Workflow gerado
 

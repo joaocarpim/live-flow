@@ -166,11 +166,11 @@ A IA nunca executa o teste. Ela escreve o card; o liveflow roda sempre do mesmo 
 on: [pull_request]
 jobs:
   cards:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { fetch-depth: 0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - run: npm ci && npx playwright install --with-deps chromium
       - uses: joaocarpim/live-flow@main   # cards da branch do PR

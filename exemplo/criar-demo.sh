@@ -10,7 +10,7 @@ git init -q -b main
 cp -r "$ORIGEM/app" "$ORIGEM/.liveflow" .
 cat > package.json <<JSON
 { "name": "pedra-fina-demo", "private": true, "type": "module",
-  "devDependencies": { "liveflow": "file:$LIVEFLOW", "playwright": "^1.57.0" } }
+  "devDependencies": { "liveflow": "file:$LIVEFLOW", "playwright": "^1.65.1" } }
 JSON
 printf 'node_modules\n.liveflow/execucoes\n' > .gitignore
 git add -A && git -c user.name=demo -c user.email=demo@local commit -q -m "Marmoraria Pedra Fina"
