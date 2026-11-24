@@ -1,6 +1,6 @@
 # liveflow
 
-Testa o fluxo de tela de cada card ou branch, de forma determinística, antes de entregar.
+Testa o fluxo de tela de cada card, em blocos, de forma determinística, antes de entregar.
 CLI em Node 22 (TypeScript rodando direto, sem build no desenvolvimento) + extensão do VS Code (próxima fase).
 Logo: commits formando um check (`assets/logo-liveflow.svg`). Independente do safemerge.
 
@@ -15,12 +15,14 @@ Logo: commits formando um check (`assets/logo-liveflow.svg`). Independente do sa
 7. **Segredo não vai para arquivo.** `{{segredo:nome}}` vem de `LIVEFLOW_SEGREDO_NOME` (a extensão vai usar SecretStorage). Prompts levam o nome, nunca o valor.
 8. **O checkout da pessoa não é tocado.** Cada branch roda numa cópia (`git worktree`) que é removida no fim.
 9. **Com mais de um card, nunca ao vivo.** Ao vivo é só para um card.
+10. **O sistema em teste é o único destino.** Link vindo de e-mail ou variável só abre se for do próprio sistema; upload só de arquivo dentro do projeto.
+11. **Código usado fica registrado.** Cada serviço anota branch e sha; se outro repositório não tem a branch, usa a base e escreve isso no resultado.
 
 ## Decisão: só cards, em blocos (24/11/2026)
 
 O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da branch": a branch é só o código que o card usa (`branch:` no card). Motivo: falha precisa apontar a entrega e o critério; um fluxo da branch inteira falha vago e envelhece a cada commit.
 
-- Escolha: `liveflow rodar C-01 C-02` ou `--todos`. `liveflow blocos ...` mostra o agrupamento antes.
+- Escolha: `liveflow rodar C-01 C-02`, `--todos`, `--da-branch` (cards da branch atual; o pre-push usa) ou `--regressao` (cards `entregue: sim`, no código da base). `liveflow blocos ...` mostra o agrupamento antes.
 - Jornada (`tipo: jornada`, `etapas: [C-01, C-02]`): junta os passos dos cards num teste só, para o caminho de ponta a ponta. A falha diz a etapa.
 - Branches servem para **criar** cards: `mapear`, `rascunho` e `prompt artefato` (rascunho sem passos, o Claude completa).
 
@@ -34,16 +36,23 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 ## Como um bloco é testado (`src/executar.ts`)
 
 1. Trava de alvo (`seguranca.ts`).
-2. Com `sistema.iniciar`: cópia da branch do bloco → `preparar` → sobe o app numa porta livre (`{{porta}}`) → espera `saude`. Sem `iniciar`: só testa se o checkout atual É a branch do bloco; senão todos os cards do bloco ficam "não rodou".
+2. Com `sistema.servicos` (ou `iniciar`, que vira o serviço `app`): para cada serviço, cópia da branch → dependências (node_modules do seu checkout via link quando o lockfile é idêntico; senão `preparar`) → portas livres para todos → sobe cada um (`{{porta}}`, `{{porta.x}}`, `{{url.x}}`, env `LIVEFLOW_URL_X`) → espera `saude`. Serviço com `repo:` usa a branch de mesmo nome naquele repositório, senão a base dele (anotado). Sem serviços: só testa se o checkout atual É a branch do bloco; senão todos ficam "não rodou". Cópias de execuções interrompidas são limpas com `git worktree prune`.
 3. Antes de cada tentativa: `seed` (com `{{execucao}}`).
-4. Fluxo num processo filho (`runtime/fluxo.ts`) com Playwright do projeto testado; sem o Chromium do Playwright, usa o Google Chrome instalado.
+4. Fluxo num processo filho (`runtime/fluxo.ts`) com Playwright do projeto testado; sem o Chromium do Playwright, usa o Google Chrome instalado. Uma sessão de navegador por conta (`como:`); login na primeira vez que a conta aparece; com `reaproveitar`, a sessão fica guardada no bloco e é confirmada pelos passos de `verificar` antes de usar. `dispositivo: celular` emula iPhone 13 (390 px, toque).
+   Quando um alvo não é encontrado, lista os parecidos que existem na tela (sem IA) para separar "texto mudou" de "bug".
 5. `comRepeticao` → passou / falhou confirmado / instável.
 6. Modo completo: vizinhos = cards prontos cujos `arquivos` a branch mexeu. Falhou na branch → roda na base: passa na base = "quebrou nesta branch"; falha na base = "já quebrado".
 7. Tudo vira evento em `.liveflow/execucoes/<data>/events.ndjson` (contrato v1, `eventos.ts`) + `resultado.json`, print da falha, vídeo e `trace.zip`.
 
 ## Formato do artefato
 
-`.liveflow/cards.yaml`. Exemplo completo: `liveflow iniciar`. Ações de passo: `abrir` (sempre a primeira, caminho relativo), `clicar`, `preencher`, `selecionar`, `marcar`, `ver_texto`, `nao_ver_texto`, `ver_url` (glob), `api` (status + `contem` parcial), `esperar_ms` (evitar). `criterio: N` liga o passo ao critério de aceite. Card sem `como_testar` = "sem passos", não selecionável. Campos de execução: `altera`, `depende_de`, `exclusivo`, `tipo: jornada` + `etapas`.
+`.liveflow/cards.yaml`. Exemplo completo: `liveflow iniciar`.
+
+- Ações de passo: `abrir` (sempre a primeira, caminho relativo), `clicar`, `preencher`, `selecionar`, `marcar`, `enviar_arquivo` (arquivos dentro do projeto, ex.: `.liveflow/arquivos/`), `ver_texto`, `nao_ver_texto`, `ver_url` (glob), `guardar` (`da_url` ou `do_texto`, expressão com um grupo → `{{nome}}` nos passos seguintes), `api` (status, `contem` parcial, `guardar: { nome: caminho.no.json }`), `ver_email` (Mailpit; `guardar_link`), `conferir_manual` (vira pendência humana, não falha), `esperar_ms` (evitar).
+- Em cada passo: `criterio: N` (qual critério prova) e `como: conta` (quem faz).
+- `contas`: `entrar` (passos de login), `verificar` (passos que confirmam a sessão), `reaproveitar`.
+- Card: `branch`, `arquivos`, `criterios`, `como_testar`, `altera`, `depende_de`, `exclusivo`, `dispositivo` (desktop/celular), `entregue`, `tipo: jornada` + `etapas`, `testes` (perfil das camadas).
+- Card sem `como_testar` = "sem passos", não selecionável.
 
 ## Mapa do código
 
@@ -60,19 +69,25 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 | `src/comparacao.ts` | impressão digital de achados, novo × já existia, regressão |
 | `src/prompts.ts` | textos para o Claude (passos, artefato, resolver) |
 | `src/eventos.ts` | contrato de eventos v1 |
+| `src/email.ts` | leitura de e-mail de teste (Mailpit) |
+| `src/sugestoes.ts` | elementos parecidos quando o alvo some |
+| `src/gravar.ts` | gravador: navegador → passos; salva no YAML mantendo comentários |
+| `src/relatorios.ts` | JUnit, histórico, quarentena de instáveis |
+| `src/integracoes.ts` | hook pre-push, workflow do GitHub, segredos usados |
+| `src/descricao.ts` | passo em linguagem simples |
 | `src/cli.ts` | comandos |
 
 ## Comandos de desenvolvimento
 
-- `npm test`: 46 testes (git real com branch local e remota, app subindo por branch).
-- `LIVEFLOW_PW_NODE_MODULES=/caminho/node_modules npm test`: inclui o ponta a ponta com navegador de verdade.
+- `npm test`: 64 testes (git real com branch local e remota, dois repositórios, app subindo por branch, Mailpit falso).
+- `LIVEFLOW_PW_NODE_MODULES=/caminho/node_modules npm test`: inclui os 3 testes com navegador de verdade (duas pessoas, foto, celular, e-mail, sessão reaproveitada, sugestão de texto, gravador).
 - `npm run typecheck`, `npm run build` (gera `dist/` para publicar).
 
 ## Próximas fases
 
 | Versão | Entrega |
 |---|---|
-| 0.1 (feita) | artefato, passo a passo determinístico, jornadas, blocos (1 app por branch, ondas, paralelo seguro), seed por tentativa, repetição, vizinhos, trava de alvo, eventos, prompts, CLI |
+| 0.1 (feita) | artefato, passo a passo determinístico (inclui guardar, upload, várias pessoas, e-mail, celular, conferência manual), jornadas, blocos, vários serviços e repositórios, dependências reaproveitadas, seed por tentativa, repetição, vizinhos, sugestões de texto, gravador, trava de alvo, eventos, prompts, histórico/quarentena, JUnit, pre-push, workflow do GitHub, CLI |
 | 0.2 | extensão VS Code: lista de cards, prévia dos blocos, criar cards das branches locais/remotas, ao vivo com navegador visível, resultados, botões "Resolver com Claude" (copiar + abrir Claude Code), segredos no SecretStorage |
 | 0.3 | Código: estática diff-aware (Semgrep, gitleaks), dependências (OSV), unitária dos arquivos do card, cobertura só das linhas do diff |
 | 0.4 | API e dados: permissões por perfil (a partir de `perfis`), contrato OpenAPI, webhooks repetidos e fora de ordem |

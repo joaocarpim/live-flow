@@ -9,7 +9,7 @@ import { executar } from '../src/executar.ts';
 import type { OpcoesExecucao } from '../src/executar.ts';
 import { Registro } from '../src/eventos.ts';
 import type { EntradaFluxo } from '../src/runtime/fluxo.ts';
-import { repoDeTeste } from './ajuda.ts';
+import { APP, commit, g, repoDeTeste } from './ajuda.ts';
 
 const { repo } = repoDeTeste();
 
@@ -139,4 +139,31 @@ test('se a dependência falha, o card dependente não roda e diz por quê', asyn
   assert.deepEqual(res.map((r) => [r.card, r.resultado]), [['C-01', 'falhou'], ['C-11', 'nao_rodou']]);
   assert.match(res[1]!.motivo!, /depende de C-01, que falhou/);
   assert.ok(!chamados.includes('C-11'));
+});
+
+test('frontend e API em repositórios separados: cada um no código certo, e anotado', async () => {
+  // API em outro repositório: tem feat/aprovacao, não tem feat/sem-card.
+  const api = mkdtempSync(join(tmpdir(), 'lf-api-'));
+  g(api, 'init', '-q', '-b', 'main');
+  commit(api, 'api base', { 'api.mjs': APP('api-base') });
+  g(api, 'checkout', '-q', '-b', 'feat/aprovacao');
+  commit(api, 'api aprovacao', { 'api.mjs': APP('api-aprovacao') });
+  g(api, 'checkout', '-q', 'main');
+  const sistema = `  url: http://127.0.0.1:{{porta}}\n  permitidos: [127.0.0.1]\n  servicos:\n    - { nome: web, iniciar: "node app.mjs {{porta}}" }\n    - { nome: api, iniciar: "node api.mjs {{porta}}", repo: ${api} }\n`;
+  const art = lerArtefato(`sistema:\n${sistema}cards:\n  - { id: C-01, titulo: a, branch: feat/aprovacao, como_testar: [ { abrir: / } ] }\n  - { id: C-05, titulo: b, branch: feat/sem-card, como_testar: [ { abrir: / } ] }\n`);
+  assert.deepEqual(art.problemas, []);
+  const pasta = mkdtempSync(join(tmpdir(), 'lf-exec-'));
+  const vistos: Record<string, string> = {};
+  const { blocos } = montarBlocos(art.cards, ['C-01', 'C-05'], { dadosIsolados: false });
+  const res = await executar({
+    repo, artefato: art, blocos, aoVivo: false, modo: 'rapido', registro: new Registro(join(pasta, 'events.ndjson')), pasta,
+    executorFluxo: async (e) => ((vistos[e.card] = await conteudoNoAr(e)), 0),
+  });
+  const c01 = res.find((r) => r.card === 'C-01')!;
+  const c05 = res.find((r) => r.card === 'C-05')!;
+  assert.deepEqual(c01.codigo!.map((c) => [c.servico, c.ref, c.observacao ?? '']), [['web', 'feat/aprovacao', ''], ['api', 'feat/aprovacao', '']]);
+  assert.deepEqual(c05.codigo!.map((c) => [c.servico, c.ref]), [['web', 'feat/sem-card'], ['api', 'main']]);
+  assert.match(c05.codigo![1]!.observacao!, /não existe feat\/sem-card/);
+  assert.match(vistos['C-01']!, /aprovacao/);
+  assert.match(vistos['C-05']!, /base/, 'feat/sem-card não muda o app.mjs');
 });

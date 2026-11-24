@@ -24,7 +24,8 @@ export interface PlanoBlocos {
   paralelo: boolean;
 }
 
-export function montarBlocos(todos: CardAvaliado[], ids: string[], opcoes: { dadosIsolados: boolean }): PlanoBlocos {
+export function montarBlocos(todos: CardAvaliado[], ids: string[], opcoes: { dadosIsolados: boolean; base?: string }): PlanoBlocos {
+  const codigoDe = (c: CardAvaliado) => (c.card.entregue ? opcoes.base ?? 'main' : c.card.branch ?? '');
   const porId = new Map(todos.map((c) => [c.card.id, c]));
   const recusados: PlanoBlocos['recusados'] = [];
   const incluidos: PlanoBlocos['incluidos'] = [];
@@ -69,12 +70,12 @@ export function montarBlocos(todos: CardAvaliado[], ids: string[], opcoes: { dad
   for (const c of [...escolhidos.values()].sort(ordem(prof))) {
     if (c.card.exclusivo) sozinhos.push(c);
     else {
-      const k = c.card.branch ?? '';
+      const k = codigoDe(c);
       grupos.set(k, [...(grupos.get(k) ?? []), c]);
     }
   }
   const blocos: Bloco[] = [...grupos.entries()].map(([k, cards]) => ({ branch: k || null, ondas: ondas(cards, prof, opcoes.dadosIsolados), sozinho: false }));
-  for (const c of sozinhos) blocos.push({ branch: c.card.branch ?? null, ondas: [[c]], sozinho: true });
+  for (const c of sozinhos) blocos.push({ branch: codigoDe(c) || null, ondas: [[c]], sozinho: true });
 
   // blocos com dependência mais rasa primeiro, para as dependências entre blocos chegarem antes
   const menorProf = (b: Bloco) => Math.min(...b.ondas.flat().map((c) => prof.get(c.card.id)!));

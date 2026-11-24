@@ -1,7 +1,7 @@
 // Tipos compartilhados do liveflow. Nada aqui executa nada.
 
 /** Ações que um passo do "Como testar" pode ter. Cada passo tem exatamente uma. */
-export const ACOES = ['abrir', 'clicar', 'preencher', 'selecionar', 'marcar', 'ver_texto', 'nao_ver_texto', 'ver_url', 'api', 'esperar_ms'] as const;
+export const ACOES = ['abrir', 'clicar', 'preencher', 'selecionar', 'marcar', 'enviar_arquivo', 'ver_texto', 'nao_ver_texto', 'ver_url', 'guardar', 'api', 'ver_email', 'conferir_manual', 'esperar_ms'] as const;
 export type Acao = (typeof ACOES)[number];
 
 export type Passo =
@@ -13,11 +13,32 @@ export type Passo =
   | { acao: 'ver_texto'; texto: string }
   | { acao: 'nao_ver_texto'; texto: string }
   | { acao: 'ver_url'; padrao: string }
-  | { acao: 'api'; metodo: string; rota: string; corpo?: unknown; status: number; contem?: Record<string, unknown> }
+  | { acao: 'enviar_arquivo'; campo: string; arquivos: string[] }
+  | { acao: 'guardar'; nome: string; da_url?: string; do_texto?: string }
+  | { acao: 'api'; metodo: string; rota: string; corpo?: unknown; status: number; contem?: Record<string, unknown>; guardar?: Record<string, string> }
+  | { acao: 'ver_email'; para: string; assunto?: string; guardar_link?: { nome: string; contem?: string } }
+  | { acao: 'conferir_manual'; texto: string }
   | { acao: 'esperar_ms'; ms: number };
 
 /** Passo já validado, com a linha de origem e o critério que ele prova (se houver). */
-export type PassoCard = Passo & { n: number; criterio?: number; /** Em jornadas: de qual card veio o passo. */ etapa?: string };
+export type PassoCard = Passo & {
+  n: number;
+  criterio?: number;
+  /** Em jornadas: de qual card veio o passo. */
+  etapa?: string;
+  /** Conta (pessoa) que faz o passo, definida em "contas". Sem "como" = visitante sem login. */
+  como?: string;
+};
+
+/** Uma pessoa de teste: como entra no sistema e como saber que a sessão ainda vale. */
+export interface Conta {
+  nome: string;
+  entrar: PassoCard[];
+  /** Passos que confirmam que a sessão guardada ainda vale (ex.: abrir /painel e ver "Sair"). */
+  verificar?: PassoCard[];
+  /** Guardar a sessão entre cards do mesmo bloco (mais rápido). Sempre confirmada com "verificar". */
+  reaproveitar: boolean;
+}
 
 export interface PerfilCard {
   interface?: boolean;
@@ -41,6 +62,10 @@ export interface Card {
   depende_de: string[];
   /** Roda sozinho, sem nada em paralelo (ex.: muda configuração global). */
   exclusivo: boolean;
+  /** Tela usada no fluxo. celular = 390 px, toque e navegador de celular. */
+  dispositivo: 'desktop' | 'celular';
+  /** Card já entregue (merge feito): passa a rodar no código da base, como regressão. */
+  entregue: boolean;
   descricao?: string;
   /** Branch onde o código do card está (local "feat/x" ou remota "origin/feat/x"). */
   branch?: string;
@@ -60,8 +85,21 @@ export interface CardAvaliado {
   problemas: string[];
 }
 
+/** Um processo do sistema (app, api, worker). Pode estar em outro repositório. */
+export interface Servico {
+  nome: string;
+  /** Comando para subir. Use {{porta}} (a dele), {{porta.outro}} e {{url.outro}}. */
+  iniciar: string;
+  saude: string;
+  /** Pasta de outro repositório (relativa a este). Sem ela, é este repositório. */
+  repo?: string;
+  /** Base do outro repositório, quando ele não tem a branch do card. */
+  base?: string;
+  preparar?: string;
+}
+
 export interface Sistema {
-  /** Endereço do sistema em teste. Pode ter {{porta}} quando o liveflow inicia o app. */
+  /** Endereço do sistema em teste. Pode ter {{porta}} (do primeiro serviço) ou {{porta.nome}}. */
   url: string;
   /** Hosts que podem receber testes (inclusive ataque e carga). */
   permitidos: string[];
@@ -75,6 +113,12 @@ export interface Sistema {
   iniciar?: string;
   /** Caminho que responde quando o app está pronto. */
   saude: string;
+  /** Processos a subir por bloco. "iniciar" sozinho vira um serviço chamado app. */
+  servicos: Servico[];
+  /** Caixa de e-mail de teste (Mailpit), para o passo ver_email. */
+  email?: { mailpit: string };
+  /** Reaproveitar node_modules quando o lockfile da branch é igual ao do seu checkout. */
+  reaproveitarDependencias: boolean;
   /** Comando que zera o banco de teste antes de cada tentativa. Pode usar {{execucao}}. */
   seed?: string;
   /** Quantos fluxos ao mesmo tempo. Só passa de 1 se cada execução tiver app e banco próprios. */
@@ -85,6 +129,7 @@ export interface Artefato {
   versao: 1;
   sistema: Sistema;
   variaveis: Record<string, string>;
+  contas: Record<string, Conta>;
   cards: CardAvaliado[];
   /** Problemas do arquivo inteiro (não de um card). */
   problemas: string[];

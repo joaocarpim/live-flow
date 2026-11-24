@@ -1,6 +1,6 @@
 <p align="center"><img src="assets/logo-liveflow-com-nome.svg" width="360" alt="liveflow"></p>
 
-Testa o fluxo de tela de cada card ou branch antes de entregar. Sem IA na execução: o mesmo passo a passo roda sempre do mesmo jeito.
+Testa o fluxo de tela de cada card antes de entregar. Sem IA na execução: o mesmo passo a passo roda sempre do mesmo jeito.
 
 ## Começar
 
@@ -49,5 +49,22 @@ C-02     ✗ falhou (confirmado 3/3)  · feat/quebrado @ 31c769b
 ```
 
 Print, vídeo, `trace.zip` (abra com `npx playwright show-trace`) e `events.ndjson` ficam em `.liveflow/execucoes/`.
+
+## Escrever o passo a passo
+
+```bash
+liveflow gravar C-04 --caminho /agenda --salvar   # faça o fluxo no navegador; vira passos do card
+liveflow prompt passos C-04                       # ou peça ao Claude
+```
+
+O passo a passo aceita várias pessoas no mesmo fluxo (`como: tecnico`, `como: cliente`), guardar valores (`guardar`), enviar fotos (`enviar_arquivo`), ler o e-mail de teste (`ver_email`), tela de celular (`dispositivo: celular`) e conferências que só uma pessoa pode fazer (`conferir_manual`).
+
+## Automatizar
+
+```bash
+liveflow hook instalar     # antes de cada push: cards da branch, modo rápido
+liveflow ci gerar          # GitHub: cards da branch no PR + regressão dos entregues toda noite
+liveflow historico         # últimas execuções e cards em quarentena
+```
 
 Detalhes, princípios e próximas fases: [CLAUDE.md](CLAUDE.md).

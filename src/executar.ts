@@ -1,11 +1,11 @@
 // Orquestra a execução: cópia da branch → app no ar → banco zerado → fluxo → repetição → vizinhos.
 // Princípio: só dizer "passou" ou "falhou" quando tivermos certeza de QUAL código foi testado.
 import { spawn } from 'node:child_process';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, symlinkSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { arquivosMudados, branchAtual, criarCopia } from './git.ts';
+import { arquivosMudados, branchAtual, criarCopia, git, shaDe } from './git.ts';
 import { globParaRegex } from './fontes.ts';
 import type { AlvoCard } from './fontes.ts';
 import type { Bloco } from './blocos.ts';
@@ -15,7 +15,7 @@ import { verificarAlvo } from './seguranca.ts';
 import { descrever } from './descricao.ts';
 import type { Registro } from './eventos.ts';
 import type { EntradaFluxo } from './runtime/fluxo.ts';
-import type { Artefato, CardAvaliado, Certeza, Resultado, Sistema } from './tipos.ts';
+import type { Artefato, CardAvaliado, Certeza, Resultado, Servico, Sistema } from './tipos.ts';
 import type { Modo } from './plano.ts';
 
 export interface FalhaPasso {
@@ -25,6 +25,17 @@ export interface FalhaPasso {
   motivo: string;
   print?: string;
   url?: string;
+  /** Elementos parecidos que existem na tela (quando o alvo não foi encontrado). */
+  sugestoes?: string[];
+}
+
+/** Qual código cada serviço usou. Fica no resultado para ninguém ter dúvida do que foi testado. */
+export interface CodigoUsado {
+  servico: string;
+  repo: string;
+  ref: string;
+  sha: string;
+  observacao?: string;
 }
 
 export interface ResultadoVizinho {
@@ -45,6 +56,9 @@ export interface ResultadoCard {
   bancoZerado: boolean;
   falha?: FalhaPasso;
   avisos: { regra: string; mensagem: string }[];
+  /** Conferências que só uma pessoa pode fazer (conferir_manual). */
+  pendencias: string[];
+  codigo?: CodigoUsado[];
   motivo?: string;
   pasta: string;
   vizinhos: ResultadoVizinho[];
@@ -69,6 +83,8 @@ export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
   const total = o.blocos.reduce((n, b) => n + b.ondas.flat().length, 0);
   const aoVivo = o.aoVivo && total === 1; // com mais de um card, nunca ao vivo
   o.registro.emitir('execucao_inicio', { blocos: o.blocos.map((b) => ({ branch: b.branch, ondas: b.ondas.map((on) => on.map((c) => c.card.id)) })), modo: o.modo, aoVivo, paralelo: sistema.paralelo });
+  // cópias de execuções interrompidas (Ctrl+C, máquina desligada) somem do registro do git
+  await git(o.repo, ['worktree', 'prune']).catch(() => undefined);
   const resultados = new Map<string, ResultadoCard>();
   for (const [i, bloco] of o.blocos.entries()) await executarBloco(o, bloco, i + 1, aoVivo, resultados);
   const lista = [...resultados.values()];
@@ -84,7 +100,7 @@ async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, aoVivo:
   const novo = (c: CardAvaliado): ResultadoCard => {
     const pasta = join(o.pasta, c.card.id);
     mkdirSync(pasta, { recursive: true });
-    const r: ResultadoCard = { card: c.card.id, branch: bloco.branch, resultado: 'nao_rodou', tentativas: 0, bancoZerado: !!sistema.seed, avisos: [], pasta, vizinhos: [] };
+    const r: ResultadoCard = { card: c.card.id, branch: bloco.branch, resultado: 'nao_rodou', tentativas: 0, bancoZerado: !!sistema.seed, avisos: [], pendencias: [], pasta, vizinhos: [] };
     resultados.set(c.card.id, r);
     return r;
   };
@@ -100,9 +116,9 @@ async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, aoVivo:
 
   let app: AppNoAr | null = null;
   try {
-    if (sistema.iniciar) {
+    if (sistema.servicos.length) {
       try {
-        app = await subirBranch(o, sistema, bloco.branch ?? 'HEAD', `bloco ${n}`);
+        app = await subirServicos(o, sistema, bloco.branch ?? 'HEAD', `bloco ${n}`);
       } catch (e) {
         return todosNaoRodaram((e as Error).message);
       }
@@ -120,7 +136,10 @@ async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, aoVivo:
       const trabalhador = async () => {
         for (let c = fila.shift(); c; c = fila.shift()) {
           const r = novo(c);
-          if (app) r.sha = app.sha;
+          if (app) {
+            r.sha = app.sha;
+            r.codigo = app.codigo;
+          }
           o.registro.emitir('card_inicio', { card: c.card.id, branch: bloco.branch, bloco: n });
           const pendente = c.card.depende_de.find((d) => resultados.get(d)?.resultado !== 'passou');
           if (pendente) {
@@ -172,7 +191,13 @@ function fim(o: OpcoesExecucao, r: ResultadoCard, motivo?: string): ResultadoCar
 class ErroAmbiente extends Error {}
 
 async function rodarFluxo(o: OpcoesExecucao, cardId: string, passos: EntradaFluxo['passos'], url: string, aoVivo: boolean, pasta: string, r: ResultadoCard) {
-  const entrada: EntradaFluxo = { card: cardId, passos, baseUrl: url, aoVivo, pastaSaida: pasta, projeto: o.repo, timeoutPassoMs: o.timeoutPassoMs ?? 10000, variaveis: o.artefato.variaveis };
+  const card = o.artefato.cards.find((c) => c.card.id === cardId)?.card;
+  const entrada: EntradaFluxo = {
+    card: cardId, passos, baseUrl: url, aoVivo, pastaSaida: pasta, projeto: o.repo, timeoutPassoMs: o.timeoutPassoMs ?? 10000,
+    variaveis: o.artefato.variaveis, contas: o.artefato.contas, pastaSessoes: join(o.pasta, '.sessoes', r.branch ?? 'checkout'),
+    dispositivo: card?.dispositivo ?? 'desktop',
+    ...(o.artefato.sistema.email ? { mailpit: o.artefato.sistema.email.mailpit } : {}),
+  };
   let erroAmbiente: string | undefined;
   const aoEvento = (ev: Record<string, unknown>) => {
     const { tipo, ...resto } = ev;
@@ -183,7 +208,9 @@ async function rodarFluxo(o: OpcoesExecucao, cardId: string, passos: EntradaFlux
       r.falha = { passo: Number(ev.n), descricao: p ? `${descrever(p)}${p.etapa ? ` (etapa ${p.etapa})` : ''}` : 'tempo limite do fluxo', erro: String(ev.erro), motivo: String(ev.motivo) };
       if (typeof ev.print === 'string') r.falha.print = ev.print;
       if (typeof ev.url === 'string') r.falha.url = ev.url;
+      if (Array.isArray(ev.sugestoes) && ev.sugestoes.length) r.falha.sugestoes = ev.sugestoes.map(String);
     }
+    if (tipo === 'manual_pendente' && !r.pendencias.includes(String(ev.texto))) r.pendencias.push(String(ev.texto));
     o.registro.emitir(tipo as never, { card: cardId, ...resto });
   };
   delete r.falha; // cada tentativa recomeça do zero
@@ -231,37 +258,94 @@ export function executorPadrao(e: EntradaFluxo, aoEvento: (ev: Record<string, un
 
 interface AppNoAr {
   url: string;
+  /** Pasta da cópia do primeiro serviço (onde o seed roda). */
   dir: string;
   sha: string;
+  codigo: CodigoUsado[];
   parar: () => Promise<void>;
 }
 
-async function subirBranch(o: OpcoesExecucao, sistema: Sistema, ref: string, cardId: string): Promise<AppNoAr> {
-  const copia = await criarCopia(o.repo, ref);
-  o.registro.emitir('copia_pronta', { card: cardId, ref, sha: copia.sha });
-  try {
-    if (sistema.preparar) await comando(sistema.preparar, copia.dir, {}, 15 * 60_000);
-    const porta = await portaLivre();
-    const url = sistema.url.replace('{{porta}}', String(porta));
-    const proc = spawn(sistema.iniciar!.replaceAll('{{porta}}', String(porta)), { cwd: copia.dir, shell: true, detached: process.platform !== 'win32', stdio: 'ignore', env: { ...process.env, PORT: String(porta) } });
-    const parar = async () => {
-      try {
-        if (proc.pid && process.platform !== 'win32') process.kill(-proc.pid, 'SIGTERM');
-        else proc.kill();
-      } catch { /* já parou */ }
-      await copia.remover();
-    };
-    try {
-      await esperarSaude(new URL(sistema.saude, url).href, 120_000);
-    } catch (e) {
-      await parar();
-      throw new ErroAmbiente(`O app da branch ${ref} não respondeu em ${sistema.saude} em 2 minutos (comando: ${sistema.iniciar}).`);
+/** Em outro repositório: a branch de mesmo nome, se existir; senão a base dele (e fica anotado). */
+export async function refNoOutroRepo(repoDir: string, ref: string, base: string): Promise<{ ref: string; observacao?: string }> {
+  if (ref === 'HEAD') return { ref: 'HEAD' };
+  const nome = ref.replace(/^origin\//, '');
+  for (const candidato of [nome, `origin/${nome}`]) {
+    if (await shaDe(repoDir, candidato).then(() => true, () => false)) return { ref: candidato };
+  }
+  return { ref: base, observacao: `não existe ${nome} neste repositório; usei ${base}` };
+}
+
+const LOCKFILES = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb'];
+
+/** Reaproveita node_modules do seu checkout quando o lockfile é idêntico; senão roda o "preparar". */
+export async function prepararCopia(repoDir: string, copiaDir: string, preparar: string | undefined, reaproveitar: boolean): Promise<'reaproveitadas' | 'preparado' | 'nada'> {
+  const lock = LOCKFILES.find((l) => existsSync(join(copiaDir, l)));
+  if (reaproveitar && lock && existsSync(join(repoDir, lock)) && existsSync(join(repoDir, 'node_modules')) && !existsSync(join(copiaDir, 'node_modules'))) {
+    if (readFileSync(join(repoDir, lock)).equals(readFileSync(join(copiaDir, lock)))) {
+      symlinkSync(join(repoDir, 'node_modules'), join(copiaDir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+      return 'reaproveitadas';
     }
-    o.registro.emitir('app_no_ar', { card: cardId, url, sha: copia.sha });
-    return { url, dir: copia.dir, sha: copia.sha, parar };
+  }
+  if (!preparar) return 'nada';
+  await comando(preparar, copiaDir, {}, 15 * 60_000);
+  return 'preparado';
+}
+
+export function trocarPortas(texto: string, eu: string | null, portas: Map<string, number>): string {
+  return texto
+    .replace(/\{\{porta\.([a-z][a-z0-9_]*)\}\}/g, (_, n: string) => String(portas.get(n) ?? `{{porta.${n}}}`))
+    .replace(/\{\{url\.([a-z][a-z0-9_]*)\}\}/g, (_, n: string) => (portas.has(n) ? `http://127.0.0.1:${portas.get(n)}` : `{{url.${n}}}`))
+    .replaceAll('{{porta}}', String(eu ? portas.get(eu) : [...portas.values()][0]));
+}
+
+async function subirServicos(o: OpcoesExecucao, sistema: Sistema, ref: string, rotulo: string): Promise<AppNoAr> {
+  const copias: { remover: () => Promise<void> }[] = [];
+  const procs: ReturnType<typeof spawn>[] = [];
+  const parar = async () => {
+    for (const p of procs.reverse()) {
+      try {
+        if (p.pid && process.platform !== 'win32') process.kill(-p.pid, 'SIGTERM');
+        else p.kill();
+      } catch { /* já parou */ }
+    }
+    for (const c of copias) await c.remover();
+  };
+  try {
+    const portas = new Map<string, number>();
+    for (const sv of sistema.servicos) portas.set(sv.nome, await portaLivre());
+    const preparados: { sv: Servico; dir: string }[] = [];
+    const codigo: CodigoUsado[] = [];
+    for (const sv of sistema.servicos) {
+      const repoDir = sv.repo ? resolve(o.repo, sv.repo) : o.repo;
+      const alvo = sv.repo ? await refNoOutroRepo(repoDir, ref, sv.base ?? sistema.base) : { ref };
+      const copia = await criarCopia(repoDir, alvo.ref);
+      copias.push(copia);
+      codigo.push({ servico: sv.nome, repo: sv.repo ?? '.', ref: alvo.ref, sha: copia.sha, ...(alvo.observacao ? { observacao: alvo.observacao } : {}) });
+      const dep = await prepararCopia(repoDir, copia.dir, sv.preparar ?? (sv.repo ? undefined : sistema.preparar), sistema.reaproveitarDependencias);
+      o.registro.emitir('copia_pronta', { bloco: rotulo, servico: sv.nome, ref: alvo.ref, sha: copia.sha, dependencias: dep, ...(alvo.observacao ? { observacao: alvo.observacao } : {}) });
+      preparados.push({ sv, dir: copia.dir });
+    }
+    const env: Record<string, string> = {};
+    for (const [n, p] of portas) {
+      env[`LIVEFLOW_PORTA_${n.toUpperCase()}`] = String(p);
+      env[`LIVEFLOW_URL_${n.toUpperCase()}`] = `http://127.0.0.1:${p}`;
+    }
+    for (const { sv, dir } of preparados) {
+      const porta = portas.get(sv.nome)!;
+      const proc = spawn(trocarPortas(sv.iniciar, sv.nome, portas), { cwd: dir, shell: true, detached: process.platform !== 'win32', stdio: 'ignore', env: { ...process.env, ...env, PORT: String(porta) } });
+      procs.push(proc);
+      try {
+        await esperarSaude(`http://127.0.0.1:${porta}${sv.saude.startsWith('/') ? sv.saude : `/${sv.saude}`}`, 120_000);
+      } catch {
+        throw new ErroAmbiente(`O serviço ${sv.nome} (${ref}) não respondeu em ${sv.saude} em 2 minutos (comando: ${sv.iniciar}).`);
+      }
+    }
+    const url = trocarPortas(sistema.url, null, portas);
+    o.registro.emitir('app_no_ar', { bloco: rotulo, url, sha: codigo[0]!.sha, codigo });
+    return { url, dir: preparados[0]!.dir, sha: codigo[0]!.sha, codigo, parar };
   } catch (e) {
-    await copia.remover();
-    throw e instanceof ErroAmbiente ? e : new ErroAmbiente(`Não consegui preparar a branch ${ref}: ${(e as Error).message}`);
+    await parar();
+    throw e instanceof ErroAmbiente ? e : new ErroAmbiente(`Não consegui preparar ${ref}: ${(e as Error).message}`);
   }
 }
 
@@ -324,7 +408,7 @@ async function testarVizinhos(o: OpcoesExecucao, alvo: AlvoCard, url: string, ap
   const vizinhos = acharVizinhos(alvo.card.card.id, arquivos, o.artefato.cards);
   const saida: ResultadoVizinho[] = [];
   for (const v of vizinhos) {
-    const rv: ResultadoCard = { card: v.card.id, branch: ref, resultado: 'nao_rodou', tentativas: 0, bancoZerado: !!sistema.seed, avisos: [], pasta, vizinhos: [] };
+    const rv: ResultadoCard = { card: v.card.id, branch: ref, resultado: 'nao_rodou', tentativas: 0, bancoZerado: !!sistema.seed, avisos: [], pendencias: [], pasta, vizinhos: [] };
     const naBranch = await comRepeticao(async (n) => {
       await zerarBanco(sistema, app?.dir ?? o.repo, `${v.card.id}-viz-${n}`);
       return (await rodarFluxo(o, v.card.id, v.card.como_testar, url, false, join(pasta, `vizinho-${v.card.id}-${n}`), rv)).codigo === 0;
@@ -333,11 +417,11 @@ async function testarVizinhos(o: OpcoesExecucao, alvo: AlvoCard, url: string, ap
       saida.push({ card: v.card.id, resultado: 'ok' });
       continue;
     }
-    if (!sistema.iniciar) {
+    if (!sistema.servicos.length) {
       saida.push({ card: v.card.id, resultado: 'nao_rodou', motivo: 'falhou nesta branch; para saber se já falhava na base, configure sistema.iniciar', ...(rv.falha ? { falha: rv.falha } : {}) });
       continue;
     }
-    const base = await subirBranch(o, sistema, sistema.base, v.card.id);
+    const base = await subirServicos(o, sistema, sistema.base, v.card.id);
     try {
       await zerarBanco(sistema, base.dir, `${v.card.id}-base`);
       const rb: ResultadoCard = { ...rv, falha: undefined } as ResultadoCard;
@@ -350,4 +434,13 @@ async function testarVizinhos(o: OpcoesExecucao, alvo: AlvoCard, url: string, ap
   }
   o.registro.emitir('camada_fim', { card: alvo.card.card.id, camada: 'vizinhos', vizinhos: saida });
   return saida;
+}
+
+/** Sobe o sistema de uma branch para uso fora de um teste (ex.: gravar o passo a passo). */
+export async function subirParaUso(repo: string, artefato: Artefato, ref: string, registro: Registro): Promise<{ url: string; parar: () => Promise<void> }> {
+  if (!artefato.sistema.servicos.length) return { url: artefato.sistema.url, parar: async () => undefined };
+  const o = { repo, artefato, blocos: [], aoVivo: false, modo: 'rapido', registro, pasta: '' } as OpcoesExecucao;
+  const app = await subirServicos(o, artefato.sistema, ref, 'gravação');
+  await zerarBanco(artefato.sistema, app.dir, 'gravacao');
+  return { url: app.url, parar: app.parar };
 }

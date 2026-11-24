@@ -91,6 +91,8 @@ export function rascunhoDeCard(b: Pick<Branch, 'nome' | 'semRemoto'>, arquivos: 
     altera: [],
     depende_de: [],
     exclusivo: false,
+    dispositivo: 'desktop',
+    entregue: false,
     branch: b.semRemoto,
     arquivos,
     criterios: [],

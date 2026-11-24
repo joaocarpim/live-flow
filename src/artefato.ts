@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { ACOES } from './tipos.ts';
-import type { Artefato, Card, CardAvaliado, PassoCard, PerfilCard, Sistema } from './tipos.ts';
+import type { Artefato, Card, CardAvaliado, Conta, PassoCard, PerfilCard, Servico, Sistema } from './tipos.ts';
 
 export const CAMINHO_ARTEFATO = '.liveflow/cards.yaml';
 
@@ -15,7 +15,7 @@ export function caminhoArtefato(raiz: string): string {
 export function carregarArtefato(raiz: string): Artefato {
   const arq = caminhoArtefato(raiz);
   if (!existsSync(arq)) {
-    return { versao: 1, sistema: sistemaPadrao({}), variaveis: {}, cards: [], problemas: [`Não existe ${CAMINHO_ARTEFATO} neste projeto.`] };
+    return { versao: 1, sistema: sistemaPadrao({}), variaveis: {}, contas: {}, cards: [], problemas: [`Não existe ${CAMINHO_ARTEFATO} neste projeto.`] };
   }
   return lerArtefato(readFileSync(arq, 'utf8'));
 }
@@ -26,7 +26,7 @@ export function lerArtefato(texto: string): Artefato {
   try {
     bruto = parse(texto);
   } catch (e) {
-    return { versao: 1, sistema: sistemaPadrao({}), variaveis: {}, cards: [], problemas: [`O YAML não abre: ${(e as Error).message}`] };
+    return { versao: 1, sistema: sistemaPadrao({}), variaveis: {}, contas: {}, cards: [], problemas: [`O YAML não abre: ${(e as Error).message}`] };
   }
   const raiz = obj(bruto);
   if (raiz.versao !== undefined && raiz.versao !== 1) problemas.push(`versao ${String(raiz.versao)} não é suportada (use 1).`);
@@ -36,12 +36,40 @@ export function lerArtefato(texto: string): Artefato {
     if (typeof v === 'string' || typeof v === 'number') variaveis[k] = String(v);
     else problemas.push(`variaveis.${k} precisa ser texto.`);
   }
+  const contas: Record<string, Conta> = {};
+  for (const [nome, bruta] of Object.entries(obj(raiz.contas))) {
+    const c = obj(bruta);
+    const entrar: PassoCard[] = [];
+    const passos = Array.isArray(c.entrar) ? c.entrar : [];
+    if (!passos.length) problemas.push(`contas.${nome}: falta "entrar" (os passos de login).`);
+    passos.forEach((p, j) => {
+      const r = lerPasso(p, j + 1, 0);
+      if (typeof r === 'string') problemas.push(`contas.${nome}, passo ${j + 1}: ${r}`);
+      else if (r.como) problemas.push(`contas.${nome}, passo ${j + 1}: "como" não vale dentro do login.`);
+      else entrar.push(r);
+    });
+    const conta: Conta = { nome, entrar, reaproveitar: c.reaproveitar === true || c.reaproveitar === 'sim' };
+    if (c.verificar !== undefined) {
+      const brutos = Array.isArray(c.verificar) ? c.verificar : [c.verificar];
+      const lidos: PassoCard[] = [];
+      brutos.forEach((b, j) => {
+        const v = lerPasso(b, j + 1, 0);
+        if (typeof v === 'string') problemas.push(`contas.${nome}.verificar: ${v}`);
+        else lidos.push(v);
+      });
+      // Só um passo de conferência, sem "abrir": confere na página inicial.
+      if (lidos.length && lidos[0]!.acao !== 'abrir') lidos.unshift({ acao: 'abrir', caminho: '/', n: 0 });
+      if (lidos.length) conta.verificar = lidos;
+    }
+    if (conta.reaproveitar && !conta.verificar) problemas.push(`contas.${nome}: para reaproveitar a sessão, diga como verificar que ela ainda vale (verificar: { ver_texto: ... }).`);
+    contas[nome] = conta;
+  }
   const listas = Array.isArray(raiz.cards) ? raiz.cards : [];
   if (!Array.isArray(raiz.cards)) problemas.push('Falta a lista "cards".');
   const ids = new Set<string>();
   const cards = listas.map((c, i) => avaliarCard(c, i, ids));
-  resolverReferencias(cards);
-  return { versao: 1, sistema, variaveis, cards, problemas };
+  resolverReferencias(cards, contas);
+  return { versao: 1, sistema, variaveis, contas, cards, problemas };
 }
 
 function sistemaPadrao(s: Record<string, unknown>, problemas: string[] = []): Sistema {
@@ -54,12 +82,35 @@ function sistemaPadrao(s: Record<string, unknown>, problemas: string[] = []): Si
     base: typeof s.base === 'string' ? s.base : 'main',
     saude: typeof s.saude === 'string' ? s.saude : '/',
     paralelo,
+    servicos: [],
+    reaproveitarDependencias: s.reaproveitar_dependencias !== false && s.reaproveitar_dependencias !== 'nao',
   };
   if (typeof s.preparar === 'string') sistema.preparar = s.preparar;
   if (typeof s.iniciar === 'string') sistema.iniciar = s.iniciar;
   if (typeof s.seed === 'string') sistema.seed = s.seed;
+  const email = obj(s.email);
+  if (typeof email.mailpit === 'string') sistema.email = { mailpit: email.mailpit };
+  if (Array.isArray(s.servicos)) {
+    const nomes = new Set<string>();
+    s.servicos.forEach((b, i) => {
+      const x = obj(b);
+      const nome = typeof x.nome === 'string' && /^[a-z][a-z0-9_]*$/.test(x.nome) ? x.nome : '';
+      if (!nome) return void problemas.push(`servicos[${i + 1}]: "nome" precisa ser minúsculo, sem espaços (ex.: api).`);
+      if (nomes.has(nome)) return void problemas.push(`servicos: o nome ${nome} se repete.`);
+      nomes.add(nome);
+      if (typeof x.iniciar !== 'string' || !x.iniciar.includes('{{porta}}')) return void problemas.push(`servicos.${nome}: "iniciar" precisa usar {{porta}}.`);
+      const sv: Servico = { nome, iniciar: x.iniciar, saude: typeof x.saude === 'string' ? x.saude : '/' };
+      if (typeof x.repo === 'string') sv.repo = x.repo;
+      if (typeof x.base === 'string') sv.base = x.base;
+      if (typeof x.preparar === 'string') sv.preparar = x.preparar;
+      sistema.servicos.push(sv);
+    });
+    if (sistema.iniciar) problemas.push('Use "iniciar" ou "servicos", não os dois. Vou usar "servicos".');
+  } else if (sistema.iniciar) {
+    sistema.servicos.push({ nome: 'app', iniciar: sistema.iniciar, saude: sistema.saude });
+  }
   if (sistema.iniciar && !sistema.iniciar.includes('{{porta}}')) problemas.push('sistema.iniciar deve usar {{porta}} para cada branch subir na sua porta.');
-  if (sistema.paralelo > 1 && !(sistema.iniciar && sistema.seed?.includes('{{execucao}}'))) {
+  if (sistema.paralelo > 1 && !(sistema.servicos.length && sistema.seed?.includes('{{execucao}}'))) {
     problemas.push('paralelo maior que 1 precisa de app próprio por execução (iniciar com {{porta}}) e banco próprio (seed com {{execucao}}). Vou rodar 1 por vez.');
     sistema.paralelo = 1;
   }
@@ -92,7 +143,10 @@ function avaliarCard(bruto: unknown, i: number, ids: Set<string>): CardAvaliado 
     altera: listaIds(c.altera, 'altera'),
     depende_de: listaIds(c.depende_de, 'depende_de'),
     exclusivo: c.exclusivo === true || c.exclusivo === 'sim',
+    dispositivo: c.dispositivo === 'celular' ? 'celular' : 'desktop',
+    entregue: c.entregue === true || c.entregue === 'sim',
   };
+  if (c.dispositivo !== undefined && c.dispositivo !== 'celular' && c.dispositivo !== 'desktop') problemas.push(`dispositivo "${String(c.dispositivo)}" não existe (use desktop ou celular).`);
   if (tipo === 'jornada') {
     card.etapas = listaIds(c.etapas, 'etapas');
     if (card.etapas.length < 2) problemas.push('Jornada precisa de pelo menos 2 etapas (ids de cards).');
@@ -129,13 +183,17 @@ function avaliarCard(bruto: unknown, i: number, ids: Set<string>): CardAvaliado 
 }
 
 /** Depois de ler todos: valida depende_de, detecta ciclos e monta os passos das jornadas. */
-function resolverReferencias(cards: CardAvaliado[]): void {
+function resolverReferencias(cards: CardAvaliado[], contas: Record<string, Conta>): void {
   const porId = new Map(cards.map((c) => [c.card.id, c]));
   const invalidar = (c: CardAvaliado, msg: string) => {
     c.problemas = c.problemas.filter((p) => !p.startsWith('Falta o passo a passo'));
     c.problemas.push(msg);
     c.estado = 'invalido';
   };
+  for (const c of cards) {
+    const semConta = c.card.como_testar.find((p) => p.como && !contas[p.como]);
+    if (semConta) invalidar(c, `Passo ${semConta.n}: a conta "${semConta.como}" não existe em "contas".`);
+  }
   for (const c of cards) {
     for (const d of c.card.depende_de) {
       if (d === c.card.id) invalidar(c, 'O card não pode depender de si mesmo.');
@@ -209,14 +267,18 @@ function perfil(bruto: unknown, problemas: string[]): PerfilCard {
 /** Converte um passo do YAML. Devolve texto quando há erro. */
 export function lerPasso(bruto: unknown, n: number, nCriterios: number): PassoCard | string {
   const p = obj(bruto);
-  const chaves = Object.keys(p).filter((k) => k !== 'criterio');
+  const chaves = Object.keys(p).filter((k) => k !== 'criterio' && k !== 'como');
   const acoes = chaves.filter((k) => (ACOES as readonly string[]).includes(k));
   const desconhecidas = chaves.filter((k) => !(ACOES as readonly string[]).includes(k));
   if (desconhecidas.length) return `ação desconhecida "${desconhecidas[0]}". Use uma de: ${ACOES.join(', ')}.`;
   if (acoes.length !== 1) return acoes.length ? 'cada passo tem uma ação só.' : 'passo vazio.';
   const acao = acoes[0]!;
   const v = p[acao];
-  const extra: { n: number; criterio?: number } = { n };
+  const extra: { n: number; criterio?: number; como?: string } = { n };
+  if (p.como !== undefined) {
+    if (typeof p.como !== 'string' || !p.como.trim()) return '"como" precisa do nome de uma conta.';
+    extra.como = p.como.trim();
+  }
   if (p.criterio !== undefined) {
     if (typeof p.criterio !== 'number' || !Number.isInteger(p.criterio) || p.criterio < 1 || p.criterio > nCriterios) {
       return `"criterio: ${String(p.criterio)}" não existe (o card tem ${nCriterios} critério(s)).`;
@@ -264,6 +326,48 @@ export function lerPasso(bruto: unknown, n: number, nCriterios: number): PassoCa
       const opcao = txt(o.opcao);
       return campo && opcao ? { acao, campo, opcao, ...extra } : '"selecionar" precisa de campo e opcao.';
     }
+    case 'enviar_arquivo': {
+      const o = obj(v);
+      const campo = txt(o.campo);
+      const arquivos = Array.isArray(o.arquivos) ? o.arquivos.map(String) : typeof o.arquivos === 'string' ? [o.arquivos] : [];
+      if (!campo || !arquivos.length) return '"enviar_arquivo" precisa de campo e arquivos (caminhos dentro do projeto).';
+      const ruim = arquivos.find((x) => x.startsWith('/') || /^[a-z]:/i.test(x) || x.split(/[\\/]/).includes('..'));
+      if (ruim) return `arquivo "${ruim}" precisa ser um caminho dentro do projeto (sem / no começo e sem ..).`;
+      return { acao, campo, arquivos, ...extra };
+    }
+    case 'guardar': {
+      const o = obj(v);
+      const nome = txt(o.nome);
+      if (!nome || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(nome)) return '"guardar" precisa de um nome simples (letras, números e _).';
+      const fontes = ['da_url', 'do_texto'].filter((k) => o[k] !== undefined);
+      if (fontes.length !== 1) return '"guardar" precisa de uma fonte: da_url ou do_texto (expressão com um grupo entre parênteses).';
+      const padrao = txt(o[fontes[0]!]);
+      if (!padrao) return `"${fontes[0]}" precisa de uma expressão.`;
+      try {
+        if (new RegExp(padrao).source && !/\((?!\?)/.test(padrao)) return `"${padrao}" precisa de um grupo entre parênteses com o valor a guardar.`;
+      } catch {
+        return `"${padrao}" não é uma expressão válida.`;
+      }
+      return fontes[0] === 'da_url' ? { acao, nome, da_url: padrao, ...extra } : { acao, nome, do_texto: padrao, ...extra };
+    }
+    case 'ver_email': {
+      const o = obj(v);
+      const para = txt(o.para);
+      if (!para) return '"ver_email" precisa de "para" (o destinatário).';
+      const passo: PassoCard = { acao, para, ...extra };
+      if (typeof o.assunto === 'string') passo.assunto = o.assunto;
+      const g = obj(o.guardar_link);
+      if (o.guardar_link !== undefined) {
+        const nome = txt(g.nome);
+        if (!nome) return '"guardar_link" precisa de nome.';
+        passo.guardar_link = { nome, ...(typeof g.contem === 'string' ? { contem: g.contem } : {}) };
+      }
+      return passo;
+    }
+    case 'conferir_manual': {
+      const a = txt(v);
+      return a ? { acao, texto: a, ...extra } : '"conferir_manual" precisa dizer o que conferir.';
+    }
     case 'api': {
       const o = obj(v);
       const metodo = typeof o.metodo === 'string' ? o.metodo.toUpperCase() : 'GET';
@@ -274,6 +378,12 @@ export function lerPasso(bruto: unknown, n: number, nCriterios: number): PassoCa
       const passo: PassoCard = { acao, metodo, rota, status: o.status, ...extra };
       if (o.corpo !== undefined) passo.corpo = o.corpo;
       if (o.contem !== undefined) passo.contem = obj(o.contem);
+      if (o.guardar !== undefined) {
+        const g = obj(o.guardar);
+        const ruim = Object.entries(g).find(([k, x]) => !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k) || typeof x !== 'string');
+        if (ruim || !Object.keys(g).length) return '"api.guardar" é um mapa nome: caminho.no.json (ex.: { orcamento_id: dados.id }).';
+        passo.guardar = g as Record<string, string>;
+      }
       return passo;
     }
   }

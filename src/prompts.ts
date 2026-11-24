@@ -67,6 +67,7 @@ export interface FalhaParaCorrigir {
   tentativas: number;
   bancoZerado: boolean;
   url?: string;
+  sugestoes?: string[];
   evidencias: string[];
 }
 
@@ -78,6 +79,7 @@ export function promptResolver(f: FalhaParaCorrigir): string {
     `Erro: ${f.erro}`,
     `Confirmado: falhou ${f.tentativas} de ${f.tentativas} vezes${f.bancoZerado ? ', com o banco zerado a cada vez' : ' (sem seed configurado: o banco não foi zerado entre as tentativas)'}.`,
     f.url ? `Página no momento da falha: ${f.url}` : '',
+    f.sugestoes?.length ? `Na tela existe algo parecido: ${f.sugestoes.map((s) => `"${s}"`).join(', ')}. Provável mudança de texto: confirme se foi de propósito antes de mexer no código.` : '',
     f.evidencias.length ? `Evidências: ${f.evidencias.join(', ')}` : '',
     '',
     'Faça assim:',
