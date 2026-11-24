@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { localizarClicavel, localizarCampo, contem, preencherTexto, ErroPasso } from '../src/runtime/fluxo.ts';
+import { localizarClicavel, localizarCampo, contem, preencherTexto, segredosFaltando, ErroPasso } from '../src/runtime/fluxo.ts';
 import type { Loc, Pagina } from '../src/runtime/fluxo.ts';
 import { montarPlano } from '../src/plano.ts';
 import { verificarAlvo } from '../src/seguranca.ts';
 import { comRepeticao } from '../src/repeticao.ts';
 import { impressao, separarNovos, classificarRegressao } from '../src/comparacao.ts';
 import { lerArtefato } from '../src/artefato.ts';
-import { promptPassos, promptResolver } from '../src/prompts.ts';
+import { promptArtefato, promptPassos, promptResolver } from '../src/prompts.ts';
 
 // Página falsa: cada busca devolve quantos elementos "existem".
 function pagina(mapa: Record<string, number>): Pagina & { usado: string[] } {
@@ -108,4 +108,20 @@ test('prompts: nunca levam valor de segredo e pedem teste antes da correção', 
   assert.match(r, /falhou 3 de 3/);
   assert.match(r, /banco não foi zerado/, 'não afirma o que não aconteceu');
   assert.match(r, /primeiro um teste que reproduz/);
+});
+
+test('segredo sem valor é detectado antes de rodar (vira "não rodou", não falha do card)', () => {
+  const entrada = { passos: [{ acao: 'preencher', campo: 'Senha', valor: '{{segredo:senha}}' }, { acao: 'preencher', campo: 'Token', valor: '{{ segredo:token }}' }] };
+  assert.deepEqual(segredosFaltando(entrada, { LIVEFLOW_SEGREDO_TOKEN: 'x' }), ['senha']);
+  assert.deepEqual(segredosFaltando(entrada, { LIVEFLOW_SEGREDO_TOKEN: 'x', LIVEFLOW_SEGREDO_SENHA: '' }), []);
+});
+
+test('prompt do artefato parte dos cards da pessoa, não das branches', () => {
+  const t = promptArtefato('C-10 Aceite do orçamento pelo cliente (branch feat/aceite)', ['C-01']);
+  assert.match(t, /\.liveflow\/cards\.yaml/);
+  assert.match(t, /C-10 Aceite do orçamento/);
+  assert.match(t, /Já existem no artefato: C-01/);
+  assert.match(t, /como_testar/);
+  assert.doesNotMatch(t, /rascunho/);
+  assert.match(promptArtefato('', []), /use os que eu passar nesta conversa/);
 });

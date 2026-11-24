@@ -118,6 +118,12 @@ export function lerCaminho(obj: unknown, caminho: string): unknown {
   return caminho.split('.').reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined), obj);
 }
 
+/** Nomes de {{segredo:nome}} usados nos passos (e nos logins das contas) que não têm valor no ambiente. */
+export function segredosFaltando(entrada: unknown, env: NodeJS.ProcessEnv = process.env): string[] {
+  const nomes = new Set([...JSON.stringify(entrada).matchAll(/\{\{\s*segredo:([a-zA-Z0-9_]+)\s*\}\}/g)].map((m) => m[1]!));
+  return [...nomes].filter((n) => env[`LIVEFLOW_SEGREDO_${n.toUpperCase()}`] === undefined);
+}
+
 /** Troca {{nome}} pelas variáveis (do artefato e guardadas no fluxo) e {{segredo:nome}} por LIVEFLOW_SEGREDO_NOME. */
 export function preencherTexto(t: string, variaveis: Record<string, string>, env: NodeJS.ProcessEnv = process.env): string {
   return t.replace(/\{\{\s*(segredo:)?([a-zA-Z0-9_]+)\s*\}\}/g, (_, seg: string | undefined, nome: string) => {
@@ -159,6 +165,12 @@ type Sessao = { context: any; page: any; trace: string };
 
 async function principal(): Promise<void> {
   const entrada = JSON.parse(readFileSync(process.argv[2]!, 'utf8')) as EntradaFluxo;
+  // Segredo sem valor é configuração, não falha do card: vira "não rodou" antes de abrir o navegador.
+  const faltando = segredosFaltando(entrada);
+  if (faltando.length) {
+    emitir({ tipo: 'ambiente', erro: `Falta configurar ${faltando.length > 1 ? 'os segredos' : 'o segredo'} ${faltando.map((n) => `"${n}"`).join(', ')}. Na extensão: comando "liveflow: definir segredo". No terminal: ${faltando.map((n) => `LIVEFLOW_SEGREDO_${n.toUpperCase()}`).join(', ')}.` });
+    process.exit(2);
+  }
   mkdirSync(entrada.pastaSaida, { recursive: true });
   const inicio = new Date();
   const req = createRequire(join(entrada.projeto, 'package.json'));
@@ -171,17 +183,27 @@ async function principal(): Promise<void> {
     process.exit(2);
   }
   const opcoes = { headless: !entrada.aoVivo, slowMo: entrada.aoVivo ? 300 : 0 };
+  // Tentativas em ordem: Chromium do Playwright, depois o Google Chrome instalado. Ao vivo sem tela para a
+  // janela (WSL, SSH, contêiner), cada um tenta também escondido: a tela continua indo para o painel.
+  const tentativas: { nome: string; op: Record<string, unknown>; aviso?: string }[] = [];
+  for (const [nome, extra, avisoNav] of [['Chromium do Playwright', {}, ''], ['Google Chrome', { channel: 'chrome' }, 'Usando o Google Chrome instalado (o Chromium do Playwright não está instalado).']] as const) {
+    tentativas.push({ nome, op: { ...opcoes, ...extra }, aviso: avisoNav || undefined });
+    if (!opcoes.headless) tentativas.push({ nome, op: { ...opcoes, ...extra, headless: true }, aviso: `${avisoNav ? avisoNav + ' ' : ''}Não deu para abrir a janela do navegador nesta máquina; o teste roda escondido e a tela aparece aqui.` });
+  }
   let browser: any;
-  try {
-    browser = await pw.chromium.launch(opcoes);
-  } catch (e) {
+  const erros: string[] = [];
+  for (const t of tentativas) {
     try {
-      browser = await pw.chromium.launch({ ...opcoes, channel: 'chrome' });
-      emitir({ tipo: 'aviso', regra: 'navegador', mensagem: 'Usando o Google Chrome instalado (o Chromium do Playwright não está instalado).' });
-    } catch {
-      emitir({ tipo: 'ambiente', erro: `Não consegui abrir o navegador: ${String((e as Error).message).split('\n')[0]}. Rode: npx playwright install chromium` });
-      process.exit(2);
+      browser = await pw.chromium.launch(t.op);
+      if (t.aviso) emitir({ tipo: 'aviso', regra: 'navegador', mensagem: t.aviso });
+      break;
+    } catch (e) {
+      erros.push(`${t.nome}${t.op.headless ? ' (escondido)' : ' (com janela)'}: ${(String((e as Error).message).split('\n')[0] ?? '').slice(0, 160)}`);
     }
+  }
+  if (!browser) {
+    emitir({ tipo: 'ambiente', erro: `Não consegui abrir o navegador. Rode: npx playwright install chromium. Tentativas: ${erros.join(' | ')}` });
+    process.exit(2);
   }
 
   let tela: Record<string, unknown> = { viewport: { width: 1280, height: 800 } };

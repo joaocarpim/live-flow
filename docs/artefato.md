@@ -17,7 +17,7 @@ cards: [ ... ]
 | `url` | `http://localhost:3000` | endereço do sistema; `{{porta}}` (primeiro serviço) ou `{{porta.nome}}` |
 | `permitidos` | `[localhost, 127.0.0.1]` | hosts que podem ser testados |
 | `producao` | `[]` | hosts que **nunca** são alvo, mesmo se aparecerem em `permitidos` |
-| `base` | `main` | branch de comparação (vizinhos, regressão, rascunhos) |
+| `base` | `main` | branch de comparação (vizinhos e regressão) |
 | `iniciar` | | comando que sobe o app da branch, com `{{porta}}` |
 | `servicos` | | vários processos (ver abaixo); substitui `iniciar` |
 | `saude` | `/` | caminho que responde quando o app está pronto |

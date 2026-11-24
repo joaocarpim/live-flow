@@ -1,14 +1,9 @@
-// De onde vem o que testar.
-// O card diz O QUE verificar (passo a passo). A branch diz QUAL código está sendo verificado.
-// Por isso as duas fontes convivem:
-//   - "artefato": você escolhe cards; o código vem da branch declarada no card (ou do checkout atual).
-//   - "branches": você escolhe branches (locais e/ou remotas); o liveflow acha os cards de cada uma.
-//     Branch sem card vira um rascunho de card que ainda precisa do passo a passo.
+// O que testar vem sempre do artefato: você escolhe cards; o código vem da branch declarada no card
+// (ou do checkout atual). O contexto da branch (arquivos e commits) só ajuda o Claude a escrever passos.
 import { arquivosMudados, commitsDaBranch, listarBranches } from './git.ts';
 import type { Branch } from './git.ts';
-import type { Card, CardAvaliado } from './tipos.ts';
+import type { CardAvaliado } from './tipos.ts';
 
-export type Fonte = { tipo: 'artefato'; cards: string[] } | { tipo: 'branches'; branches: string[] };
 
 export interface Vinculo {
   card: CardAvaliado;
@@ -23,8 +18,6 @@ export interface AlvoBranch {
   arquivos: string[];
   commits: { sha: string; assunto: string }[];
   cards: Vinculo[];
-  /** Quando nenhum card foi achado: um rascunho para completar com o passo a passo. */
-  rascunho?: Card;
 }
 
 export interface AlvoCard {
@@ -57,7 +50,6 @@ export async function alvosDasBranches(repo: string, base: string, branches: str
     const commits = await commitsDaBranch(repo, base, nome);
     const cards = vincular(info, arquivos, todos);
     const alvo: AlvoBranch = { branch: nome, base, arquivos, commits, cards };
-    if (!cards.length) alvo.rascunho = rascunhoDeCard(info, arquivos, commits);
     saida.push(alvo);
   }
   return saida;
@@ -78,27 +70,6 @@ export function vincular(branch: Pick<Branch, 'nome' | 'semRemoto'>, arquivos: s
 
 function mesmaBranch(declarada: string, b: Pick<Branch, 'nome' | 'semRemoto'>): boolean {
   return declarada === b.nome || declarada === b.semRemoto || declarada.split('/').slice(1).join('/') === b.semRemoto;
-}
-
-/** Rascunho determinístico: sem IA, sem inventar passos. O passo a passo fica vazio de propósito. */
-export function rascunhoDeCard(b: Pick<Branch, 'nome' | 'semRemoto'>, arquivos: string[], commits: { assunto: string }[]): Card {
-  const slug = b.semRemoto.replace(/^(feat|feature|fix|bugfix|hotfix|chore|refactor)\//i, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
-  const titulo = commits.length ? commits[commits.length - 1]!.assunto : slug.replace(/-/g, ' ');
-  return {
-    id: `B-${slug || 'branch'}`,
-    titulo,
-    tipo: 'card',
-    altera: [],
-    depende_de: [],
-    exclusivo: false,
-    dispositivo: 'desktop',
-    entregue: false,
-    branch: b.semRemoto,
-    arquivos,
-    criterios: [],
-    como_testar: [],
-    perfil: { interface: arquivos.some(ehArquivoDeTela) ? true : false },
-  };
 }
 
 export function ehArquivoDeTela(caminho: string): boolean {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.5 (2026-11-24)
+
+- Ao vivo com vários cards: rodam um por vez, e a tela mostra o card que está rodando, com a fila em cima (dá para clicar e rever um card que já terminou).
+- Quando a janela do navegador não pode abrir (WSL, SSH, contêiner sem tela), o teste não para mais: roda escondido e a tela continua aparecendo no painel, com um aviso.
+- Card que não rodou mostra o motivo na tela da execução, em vez de ficar em "Preparando…".
+- O aviso do canto conta cada resultado (passou, falha confirmada, instável, não rodou) e diz por que um card não rodou. Antes dizia "1 card testado" mesmo quando ele não tinha rodado.
+- Segredo sem valor (ex.: a senha) vira "não rodou" na hora, com o que fazer, em vez de falhar o card 3 vezes com sugestões de texto.
+- Navegador: tenta o Chromium do Playwright e o Google Chrome, cada um com janela e escondido, antes de desistir; o motivo lista o que foi tentado.
+- Fim da criação de cards a partir de branches: saíram `liveflow branches`, `mapear` e `rascunho`, e a aba "Criar cards". No lugar, a aba **Criar artefato**: você cola os cards do seu quadro e o Claude escreve o `.liveflow/cards.yaml` com o passo a passo (`liveflow prompt artefato --de cards.txt`). Gravar o passo a passo de um card continua.
+
 ## 0.1.4 (2026-11-24)
 
 - Nova logo: o check de commits agora fica dentro de um hexágono de quinas levemente arredondadas. Vale para o ícone da extensão, o ícone da barra lateral e as logos em `assets/`.

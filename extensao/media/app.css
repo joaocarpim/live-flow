@@ -162,3 +162,6 @@ body[data-modo=lateral] .topo-linha { padding: 10px 12px; }
 .lat-sec { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--mudo); margin: 4px 8px; }
 .lat-item { display: flex; gap: 8px; align-items: flex-start; padding: 5px 8px; font-size: 12px; }
 .ok-txt { color: var(--verde); } .erro-txt { color: var(--vermelho); } .amb-txt { color: var(--ambar); }
+
+.fila-vivo{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.fila-vivo .btn{display:inline-flex;align-items:center;gap:6px}

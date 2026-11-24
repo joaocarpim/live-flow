@@ -90,8 +90,8 @@ export interface OpcoesExecucao {
   artefato: Artefato;
   blocos: Bloco[];
   aoVivo: boolean;
-  /** Card que a pessoa escolheu ver ao vivo. Dependências incluídas sozinhas rodam escondidas antes dele. */
-  aoVivoCard?: string;
+  /** Cards que a pessoa escolheu ver ao vivo. Rodam um por vez; dependências incluídas sozinhas rodam escondidas antes deles. */
+  aoVivoCards?: string[];
   modo: Modo;
   registro: Registro;
   pasta: string;
@@ -104,10 +104,11 @@ export interface OpcoesExecucao {
 export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
   const { sistema } = o.artefato;
   const total = o.blocos.reduce((n, b) => n + b.ondas.flat().length, 0);
-  // Ao vivo só para UM card escolhido; com mais de um escolhido, nunca ao vivo.
-  const vivo = o.aoVivo ? o.aoVivoCard ?? (total === 1 ? o.blocos[0]?.ondas[0]?.[0]?.card.id : undefined) : undefined;
-  const aoVivo = !!vivo;
-  o.registro.emitir('execucao_inicio', { blocos: o.blocos.map((b) => ({ branch: b.branch, ondas: b.ondas.map((on) => on.map((c) => c.card.id)) })), modo: o.modo, aoVivo, paralelo: sistema.paralelo });
+  // Ao vivo: os cards escolhidos rodam um por vez, cada um mostrando a tela. Sem a escolha, todos são ao vivo.
+  const vivo = o.aoVivo ? new Set(o.aoVivoCards?.length ? o.aoVivoCards : o.blocos.flatMap((b) => b.ondas.flat().map((c) => c.card.id))) : undefined;
+  const aoVivo = !!vivo?.size;
+  void total;
+  o.registro.emitir('execucao_inicio', { blocos: o.blocos.map((b) => ({ branch: b.branch, ondas: b.ondas.map((on) => on.map((c) => c.card.id)) })), modo: o.modo, aoVivo, paralelo: aoVivo ? 1 : sistema.paralelo });
   // cópias de execuções interrompidas (Ctrl+C, máquina desligada) somem do registro do git
   await git(o.repo, ['worktree', 'prune']).catch(() => undefined);
   const resultados = new Map<string, ResultadoCard>();
@@ -118,7 +119,7 @@ export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
   return lista;
 }
 
-async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, vivo: string | undefined, resultados: Map<string, ResultadoCard>): Promise<void> {
+async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, vivo: Set<string> | undefined, resultados: Map<string, ResultadoCard>): Promise<void> {
   const { sistema } = o.artefato;
   const cards = bloco.ondas.flat();
   o.registro.emitir('bloco_inicio', { bloco: n, branch: bloco.branch, cards: cards.map((c) => c.card.id) });
@@ -157,7 +158,7 @@ async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, vivo: s
     const url = app?.url ?? sistema.url;
     for (const onda of bloco.ondas) {
       const fila = [...onda];
-      const largura = Math.min(sistema.paralelo, fila.length) || 1;
+      const largura = vivo ? 1 : Math.min(sistema.paralelo, fila.length) || 1;
       const trabalhador = async () => {
         for (let c = fila.shift(); c; c = fila.shift()) {
           const r = novo(c);
@@ -172,7 +173,7 @@ async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, vivo: s
             fim(o, r, `depende de ${pendente}, que ${rd ? ({ falhou: 'falhou', instavel: 'ficou instável', nao_rodou: 'não rodou', nao_se_aplica: 'não se aplica', passou: 'passou' } as const)[rd.resultado] : 'não rodou antes'}.`);
             continue;
           }
-          await testarCardNoApp(o, c, r, url, app, c.card.id === vivo);
+          await testarCardNoApp(o, c, r, url, app, !!vivo?.has(c.card.id));
         }
       };
       await Promise.all(Array.from({ length: largura }, trabalhador));

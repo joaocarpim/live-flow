@@ -6,13 +6,13 @@ import { stringify } from 'yaml';
 import { carregarArtefato, CAMINHO_ARTEFATO } from './artefato.ts';
 import { alvosDasBranches } from './fontes.ts';
 import { montarBlocos, descreverBlocos } from './blocos.ts';
-import { atualizarRemotas, arquivosMudados, branchAtual, listarBranches } from './git.ts';
+import { arquivosMudados, branchAtual } from './git.ts';
 import { montarPlano } from './plano.ts';
 import type { Modo } from './plano.ts';
-import { promptArtefatoDasBranches, promptPassos, promptResolver } from './prompts.ts';
+import { promptArtefato, promptPassos, promptResolver } from './prompts.ts';
 import { Registro } from './eventos.ts';
 import { executar, pararTudo, subirParaUso } from './executar.ts';
-import { adicionarCards, gravar, salvarPassos } from './gravar.ts';
+import { gravar, salvarPassos } from './gravar.ts';
 import { diagnosticar } from './ambiente.ts';
 import { junit, lerHistorico, limparExecucoes, quarentena } from './relatorios.ts';
 import { gerarWorkflow, instalarHook, segredosUsados } from './integracoes.ts';
@@ -33,12 +33,9 @@ Testar
   liveflow limpar [--dias 14]            apaga evidências antigas (prints, vídeos, traces)
   liveflow prompt resolver <card>        texto para o Claude corrigir a última falha
 
-Criar cards
+Criar o artefato
   liveflow iniciar                       cria ${CAMINHO_ARTEFATO} de exemplo
-  liveflow branches [--sem-remotas] [--atualizar]
-  liveflow mapear --branches a,b         quais branches já têm card
-  liveflow rascunho --branches a,b       cards em rascunho (sem passos) a partir das branches
-  liveflow prompt artefato --branches a,b
+  liveflow prompt artefato [--de cards.txt]   texto para o Claude criar o artefato com os seus cards
   liveflow prompt passos <card>          texto para o Claude escrever o passo a passo
   liveflow gravar <card> [--caminho /x] [--salvar]   faça o fluxo no navegador e vire passo a passo
 
@@ -49,12 +46,10 @@ Automatizar
 const { values: op, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    branches: { type: 'string' },
+    de: { type: 'string' },
     modo: { type: 'string', default: 'completo' },
     'ao-vivo': { type: 'boolean', default: false },
     json: { type: 'boolean', default: false },
-    atualizar: { type: 'boolean', default: false },
-    'sem-remotas': { type: 'boolean', default: false },
     todos: { type: 'boolean', default: false },
     'da-branch': { type: 'boolean', default: false },
     'branch-atual': { type: 'string' },
@@ -73,7 +68,6 @@ const { values: op, positionals } = parseArgs({
 
 const repo = op.repo ?? process.cwd();
 const [cmd, ...args] = positionals;
-const listaBranches = () => (op.branches ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const modo = (['rapido', 'completo', 'noturno'].includes(op.modo!) ? op.modo : 'completo') as Modo;
 const saida = (x: unknown, texto: () => string) => console.log(op.json ? JSON.stringify(x, null, 2) : texto());
 
@@ -97,43 +91,6 @@ async function main(): Promise<number> {
             return c.estado === 'pronto' ? linha : `${linha}\n               ${c.problemas.join('\n               ')}`;
           })
           .join('\n') || 'Nenhum card.',
-      );
-      return 0;
-    }
-    case 'branches': {
-      if (op.atualizar) await atualizarRemotas(repo);
-      const bs = await listarBranches(repo, { remotas: !op['sem-remotas'] });
-      const atual = await branchAtual(repo);
-      saida(bs, () => bs.map((b) => `${b.nome === atual ? '*' : ' '} ${b.tipo === 'local' ? 'local ' : 'remota'}  ${b.nome}`).join('\n'));
-      return 0;
-    }
-    case 'mapear':
-    case 'rascunho': {
-      const bs = listaBranches();
-      if (!bs.length) throw new Error('Informe --branches a,b');
-      const alvos = await alvosDasBranches(repo, art.sistema.base, bs, art.cards);
-      if (cmd === 'rascunho') {
-        const cards = alvos.filter((a) => a.rascunho).map((a) => {
-          const r = a.rascunho!;
-          return { id: r.id, titulo: r.titulo, branch: r.branch, arquivos: r.arquivos, criterios: [], como_testar: [] };
-        });
-        if (op.salvar && cards.length) {
-          const novos = adicionarCards(repo, cards);
-          console.log(op.json ? JSON.stringify({ adicionados: novos }) : `Adicionados ao artefato: ${novos.join(', ') || 'nenhum (já existiam)'}.`);
-          return 0;
-        }
-        console.log(op.json ? JSON.stringify({ cards }) : cards.length ? stringify({ cards }) : '# Todas as branches já têm card.');
-        return 0;
-      }
-      saida(alvos, () =>
-        alvos
-          .map((a) => {
-            const cab = `${a.branch}  ·  ${a.commits.length} commit(s), ${a.arquivos.length} arquivo(s) desde ${a.base}`;
-            const linhas = a.cards.map((v) => `   ${v.card.estado === 'pronto' ? '✓' : '–'} ${v.card.card.id} ${v.card.card.titulo}  [por ${v.motivo === 'branch' ? 'branch declarada' : `arquivos: ${v.arquivosEmComum?.slice(0, 3).join(', ')}`}]`);
-            if (a.rascunho) linhas.push(`   sem card · rascunho sugerido: ${a.rascunho.id} "${a.rascunho.titulo}" (falta o passo a passo)`);
-            return [cab, ...linhas].join('\n');
-          })
-          .join('\n\n'),
       );
       return 0;
     }
@@ -187,7 +144,7 @@ async function main(): Promise<number> {
       const pasta = op.pasta ?? join(repo, '.liveflow', 'execucoes', new Date().toISOString().replace(/[:.]/g, '-'));
       const registro = new Registro(join(pasta, 'events.ndjson'));
       if (!op.json) registro.ouvintes.push(mostrarAoVivo);
-      const res = await executar({ repo, artefato: art, blocos: plano.blocos, aoVivo: op['ao-vivo']! && ids.length === 1, ...(ids.length === 1 ? { aoVivoCard: ids[0]! } : {}), modo, registro, pasta });
+      const res = await executar({ repo, artefato: art, blocos: plano.blocos, aoVivo: op['ao-vivo']!, ...(ids.length ? { aoVivoCards: ids } : {}), modo, registro, pasta });
       if (op.junit) writeFileSync(op.junit, junit(res));
       if (op.json) console.log(JSON.stringify(res, null, 2));
       else resumo(res, pasta);
@@ -201,13 +158,14 @@ async function main(): Promise<number> {
         const ctx = c.card.branch ? (await alvosDasBranches(repo, art.sistema.base, [c.card.branch], art.cards).catch(() => []))[0] : undefined;
         console.log(promptPassos(c.card, ctx));
       } else if (tipo === 'artefato') {
-        console.log(promptArtefatoDasBranches(await alvosDasBranches(repo, art.sistema.base, listaBranches(), art.cards)));
+        const texto = op.de ? readFileSync(op.de, 'utf8') : '';
+        console.log(promptArtefato(texto, art.cards.map((c) => c.card.id)));
       } else if (tipo === 'resolver') {
         const r = ultimaFalha(id);
         const c = art.cards.find((x) => x.card.id === id);
         if (!r?.falha || !c) throw new Error(`Nenhuma falha registrada para ${id ?? '(nenhum)'}. Rode o card primeiro.`);
         console.log(promptResolver({ card: c.card, branch: r.branch, passo: r.falha.passo, descricaoPasso: r.falha.descricao, erro: r.falha.erro, tentativas: r.tentativas, bancoZerado: r.bancoZerado ?? false, ...(r.falha.sugestoes ? { sugestoes: r.falha.sugestoes } : {}), ...(r.falha.url ? { url: r.falha.url } : {}), evidencias: [r.falha.print, join(r.pasta, `tentativa-${r.tentativas}`, 'trace.zip')].filter((x): x is string => !!x) }));
-      } else throw new Error('Use: prompt passos <card> | prompt artefato --branches a,b | prompt resolver <card>');
+      } else throw new Error('Use: prompt passos <card> | prompt artefato [--de cards.txt] | prompt resolver <card>');
       return 0;
     }
     case 'limpar': {

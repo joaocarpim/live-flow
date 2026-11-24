@@ -25,11 +25,12 @@ Antes de qualquer coisa, confira se o projeto tem `.liveflow/cards.yaml` e se o 
 5. Rode `npx liveflow cards` e confirme que o card aparece como **pronto**. Corrija até aparecer.
 6. Rode `npx liveflow rodar <ID> --modo rapido` e mostre o resultado.
 
-### 2. Criar cards a partir das branches
+### 2. Criar o artefato com os cards da pessoa
 
-1. `npx liveflow mapear --branches <a,b>` mostra quais branches já têm card.
-2. `npx liveflow prompt artefato --branches <a,b>` dá o contexto de cada branch.
-3. Um card por entrega que faça sentido para quem usa o sistema (uma branch pode virar mais de um card). Campos: `id`, `titulo`, `descricao`, `branch`, `criterios`, `como_testar`.
+Os cards vêm da pessoa (do quadro dela), nunca das branches.
+1. Peça os cards se ainda não vieram: id, título, descrição, critérios e a branch onde cada um foi feito.
+2. Escreva `.liveflow/cards.yaml` com `sistema` e um card para cada um. Campos: `id`, `titulo`, `descricao`, `branch`, `arquivos`, `criterios`, `como_testar` (o passo a passo completo, lendo o código para usar textos e caminhos reais).
+3. Se o artefato já existe, complete e não duplique.
 4. Feche com `npx liveflow cards`: todos prontos.
 
 ### 3. Corrigir uma falha confirmada

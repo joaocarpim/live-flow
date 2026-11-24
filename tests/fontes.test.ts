@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { globParaRegex, rascunhoDeCard, vincular, alvosDoArtefato } from '../src/fontes.ts';
+import { globParaRegex, vincular, alvosDoArtefato } from '../src/fontes.ts';
 import { lerArtefato } from '../src/artefato.ts';
 
 const art = lerArtefato(`cards:
@@ -32,14 +32,6 @@ test('branch declarada no card tem prioridade, inclusive com nome remoto', () =>
 test('sem branch declarada, liga pelos arquivos em comum', () => {
   const v = vincular({ nome: 'feat/outra', semRemoto: 'feat/outra' }, ['src/orcamento/total.ts', 'README.md'], art.cards);
   assert.deepEqual(v.map((x) => [x.card.card.id, x.motivo, x.arquivosEmComum]), [['C-02', 'arquivos', ['src/orcamento/total.ts']]]);
-});
-
-test('rascunho não inventa passos', () => {
-  const r = rascunhoDeCard({ nome: 'feat/relatorio-pdf', semRemoto: 'feat/relatorio-pdf' }, ['web/pages/rel.tsx'], [{ assunto: 'relatório em pdf' }]);
-  assert.equal(r.id, 'B-relatorio-pdf');
-  assert.equal(r.titulo, 'relatório em pdf');
-  assert.deepEqual(r.como_testar, []);
-  assert.equal(r.perfil.interface, true);
 });
 
 test('pelo artefato, cards sem passos ou inexistentes são recusados com o motivo', () => {

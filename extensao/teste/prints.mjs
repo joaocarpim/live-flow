@@ -25,9 +25,6 @@ const porCard = new Map(resultados.map((r) => [r.card, r]));
 resultados = [...porCard.values()];
 const aoVivo = dirs.map((d) => join(execs, d)).reverse().find((d) => readFileSync(join(d, 'events.ndjson'), 'utf8').includes('"quadro"'));
 const eventosVivo = aoVivo ? readFileSync(join(aoVivo, 'events.ndjson'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
-const branches = cli('branches');
-const nomes = branches.filter((b) => !/main|master/.test(b.nome)).map((b) => b.nome);
-const mapa = cli('mapear', '--branches', nomes.join(','));
 const promptResolver = execFileSync('node', [join(ext, 'dist/cli/cli.js'), 'prompt', 'resolver', resultados.find((r) => r.resultado === 'falhou')?.card ?? prontos[0], '--repo', repo], { encoding: 'utf8' }).trim();
 const arquivo = (p) => (p && existsSync(p) ? 'file://' + p : undefined);
 
@@ -37,7 +34,6 @@ const dados = {
   blocos: { ids: prontos, dados: blocos },
   resultados: resultados.map((r) => ({ ...r, printUri: arquivo(r.falha?.print) })),
   eventosVivo: eventosVivo.map((e) => ({ ...e, imagem: arquivo(e.arquivo) })),
-  branches: { branches, mapa, erro: '' },
   promptResolver,
 };
 
@@ -57,7 +53,7 @@ function responder(m){
   if (m.tipo==='pronto'||m.tipo==='recarregar') msg({tipo:'estado',dados:DADOS.estado});
   if (m.tipo==='plano') msg({tipo:'plano',id:m.id,dados:DADOS.plano.dados});
   if (m.tipo==='blocos') msg({tipo:'blocos',ids:m.ids,dados:DADOS.blocos.dados});
-  if (m.tipo==='branches') msg({tipo:'branches',dados:DADOS.branches});
+
   if (m.tipo==='prompt') msg({tipo:'prompt',qual:m.qual,id:m.id,dados:DADOS.promptResolver});
 }
 </script>
@@ -82,7 +78,7 @@ await tirar('04-execucao-ao-vivo', `(() => { const L = window.__liveflow; const 
 await tirar('05-execucao-varios', `(() => { const L = window.__liveflow; const ids = DADOS.blocos.ids.slice(0, 5); msg({tipo:'execucao_comecou', ids, aoVivo: false}); const ev = (o) => L.aplicarEvento(o); ev({tipo:'app_no_ar', url:'http://127.0.0.1:41873'}); ev({tipo:'card_fim', card: ids[0], resultado:'passou'}); ['tentativa','passo_inicio'].forEach(()=>0); ev({tipo:'tentativa', card: ids[1], n: 2}); ev({tipo:'passo_ok', card: ids[1], n: 1, ms: 300}); ev({tipo:'passo_inicio', card: ids[1], n: 2, descricao: 'clicar em \\"Enviar link\\"'}); ev({tipo:'tentativa', card: ids[2], n: 1}); ev({tipo:'passo_ok', card: ids[2], n:1}); ev({tipo:'passo_falhou', card: ids[2], n:2, erro:'x'}); ev({tipo:'aviso', card: ids[1], mensagem:'Usando o Google Chrome instalado (o Chromium do Playwright não está instalado).'}); L.render(); })()`);
 await tirar('06-resultados', `(() => { const L = window.__liveflow; msg({tipo:'execucao_terminou', resultados: DADOS.resultados}); L.ir('resultados'); })()`, true);
 await tirar('07-problema', `(() => { const L = window.__liveflow; msg({tipo:'execucao_terminou', resultados: DADOS.resultados}); const r = DADOS.resultados.find((x) => x.resultado === 'falhou'); L.ir('problema', { problema: { modo: 'resolver', card: r.card, resultado: r } }); msg({tipo:'prompt', qual:'resolver', id: r.card, dados: DADOS.promptResolver}); })()`, true);
-await tirar('08-criar', `(() => { const L = window.__liveflow; L.ir('criar'); })()`, true);
+await tirar('08-criar', `(() => { const L = window.__liveflow; L.S.textoCards = 'C-07 · Cliente aceita o orçamento pelo link (branch feat/aceite)\\nCritérios:\\n1. O cliente abre o link e vê o valor total\\n2. Ao aceitar, o orçamento fica aprovado'; L.ir('criar'); })()`, true);
 await tirar('09-ambiente', `(() => { const L = window.__liveflow; L.ir('ambiente'); })()`, true);
 await tirar('10-historico', `(() => { const L = window.__liveflow; L.ir('historico'); })()`, true);
 const lat = await browser.newPage({ viewport: { width: 300, height: 760 } });

@@ -14,7 +14,7 @@ Logo: commits formando um check dentro de um hexágono de quinas arredondadas (`
 6. **Alvo travado.** Só hosts em `sistema.permitidos`; `sistema.producao` nunca, mesmo que esteja nos permitidos.
 7. **Segredo não vai para arquivo.** `{{segredo:nome}}` vem de `LIVEFLOW_SEGREDO_NOME` (a extensão vai usar SecretStorage). Prompts levam o nome, nunca o valor.
 8. **O checkout da pessoa não é tocado.** Cada branch roda numa cópia (`git worktree`) que é removida no fim.
-9. **Com mais de um card, nunca ao vivo.** Ao vivo é só para um card.
+9. **Ao vivo é um card por vez.** Com `--ao-vivo`, os cards escolhidos rodam em fila (paralelo desligado), cada um mostrando a tela; dependências incluídas rodam escondidas. Sem janela disponível (WSL, SSH), o navegador roda escondido e os quadros continuam indo para o painel.
 10. **O sistema em teste é o único destino.** Link vindo de e-mail ou variável só abre se for do próprio sistema; upload só de arquivo dentro do projeto.
 11. **Código usado fica registrado.** Cada serviço anota branch e sha; se outro repositório não tem a branch, usa a base e escreve isso no resultado.
 12. **Ambiente não é card.** Navegador ausente, dependência do sistema ou ffmpeg faltando viram "não rodou" (ou aviso, no caso do vídeo), nunca falha confirmada.
@@ -26,14 +26,14 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 
 - Escolha: `liveflow rodar C-01 C-02`, `--todos`, `--da-branch` (cards da branch atual; o pre-push usa) ou `--regressao` (cards `entregue: sim`, no código da base). `liveflow blocos ...` mostra o agrupamento antes.
 - Jornada (`tipo: jornada`, `etapas: [C-01, C-02]`): junta os passos dos cards num teste só, para o caminho de ponta a ponta. A falha diz a etapa.
-- Branches servem para **criar** cards: `mapear`, `rascunho` e `prompt artefato` (rascunho sem passos, o Claude completa).
+- Cards vêm sempre do artefato. Não existe criar card a partir de branch (sem `mapear`, sem `rascunho`): a pessoa passa os cards do quadro dela e o Claude escreve o artefato (`prompt artefato`); o passo a passo também pode ser gravado (`gravar`). O diff da branch só serve de contexto para o Claude escrever passos (`prompt passos`).
 
 ### Como os blocos são montados (`src/blocos.ts`, determinístico)
 
 1. Bloco = cards com a mesma `branch`. Um app no ar por bloco (subir o app é a parte lenta).
 2. Ondas por `depende_de`: o dependente roda depois; se a dependência não passou, ele vira "não rodou" com o motivo. `depende_de` não carrega estado: cada card prepara o seu no seed (para estado encadeado, use jornada). Dependência fora da seleção entra sozinha e aparece como incluída.
 3. Paralelo só com dados isolados (`paralelo > 1`, que exige `iniciar` com `{{porta}}` e `seed` com `{{execucao}}`). Mesmo assim, cards que `altera` o mesmo recurso compartilhado vão em fila.
-4. `exclusivo: sim` vira bloco sozinho. Com mais de um card no total, nunca ao vivo.
+4. `exclusivo: sim` vira bloco sozinho. Ao vivo, tudo roda um card por vez.
 
 ## Como um bloco é testado (`src/executar.ts`)
 
@@ -63,7 +63,7 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 | `src/tipos.ts` | tipos compartilhados |
 | `src/artefato.ts` | lê e valida o YAML; estado de cada card |
 | `src/blocos.ts` | blocos (1 app por branch), ondas por dependência e `altera`, exclusivos |
-| `src/fontes.ts` | branch → cards (para criar cards), rascunho, glob |
+| `src/fontes.ts` | cards escolhidos → alvos; contexto da branch (arquivos e commits) para o `prompt passos`; glob |
 | `src/git.ts` | branches locais/remotas, diff de três pontos, commits, worktree (sempre execFile) |
 | `src/runtime/fluxo.ts` | executor do navegador (processo filho), localizadores sem chute |
 | `src/executar.ts` | orquestração, app da branch, seed, repetição, vizinhos |

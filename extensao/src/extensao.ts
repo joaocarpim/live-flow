@@ -3,7 +3,8 @@
 // Ela lê o mesmo events.ndjson que o terminal, então o que aparece aqui é igual ao que o terminal mostra.
 import * as vscode from 'vscode';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, statSync, openSync, readSync, closeSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, openSync, readSync, closeSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 type Msg = { tipo: string; [k: string]: unknown };
@@ -134,19 +135,18 @@ class Painel {
       case 'rodar': {
         if (this.execucao) return void vscode.window.showWarningMessage('Já existe uma execução em andamento.');
         const ids = m.ids as string[];
-        this.enviar({ tipo: 'execucao_comecou', ids, aoVivo: !!m.aoVivo && ids.length === 1 });
+        this.enviar({ tipo: 'execucao_comecou', ids, aoVivo: !!m.aoVivo });
         this.execucao = await this.cli.rodar(
           ids,
           String(m.modo ?? 'completo'),
-          !!m.aoVivo && ids.length === 1,
+          !!m.aoVivo,
           (e) => this.enviar({ tipo: 'evento', evento: { ...e, imagem: this.uri(e.arquivo) } }),
           (res, erro) => {
             this.execucao = undefined;
             const lista = (res as { falha?: { print?: string } }[] | null)?.map((r) => ({ ...r, printUri: this.uri(r.falha?.print) })) ?? null;
             this.enviar({ tipo: 'execucao_terminou', resultados: lista, erro });
             this.atualizarLateral();
-            const falhas = lista?.filter((r) => (r as { resultado?: string }).resultado === 'falhou').length ?? 0;
-            void vscode.window.showInformationMessage(lista ? `liveflow: ${lista.length} card(s) testado(s), ${falhas} com falha confirmada.` : `liveflow: a execução não terminou. ${erro}`);
+            void avisarFim(lista as { card?: string; resultado?: string; motivo?: string }[] | null, erro);
           },
         );
         return;
@@ -156,6 +156,17 @@ class Painel {
         return;
     }
   }
+}
+
+/** Aviso no canto ao terminar: conta cada resultado e diz por que um card não rodou. */
+async function avisarFim(lista: { card?: string; resultado?: string; motivo?: string }[] | null, erro: string): Promise<void> {
+  if (!lista) return void vscode.window.showErrorMessage(`liveflow: a execução não terminou. ${erro}`);
+  const n = (r: string) => lista.filter((c) => c.resultado === r).length;
+  const partes = [[n('passou'), 'passou'], [n('falhou'), 'com falha confirmada'], [n('instavel'), 'instável'], [n('nao_rodou'), 'não rodou']].filter(([q]) => q).map(([q, t]) => `${q} ${t}`);
+  const parado = lista.find((c) => c.resultado === 'nao_rodou' && c.motivo);
+  const texto = `liveflow: ${partes.join(', ') || 'nenhum card'}.${parado ? ` ${parado.card} não rodou: ${parado.motivo}` : ''}`;
+  if (n('falhou') || n('nao_rodou')) void vscode.window.showWarningMessage(texto);
+  else void vscode.window.showInformationMessage(texto);
 }
 
 /** Mensagens que valem para o painel e para a barra lateral. */
@@ -183,7 +194,13 @@ async function tratarComum(ext: vscode.ExtensionContext, cli: Cli, m: Msg, envia
       return;
     }
     case 'prompt': {
-      const args = m.qual === 'artefato' ? ['prompt', 'artefato', '--branches', (m.branches as string[]).join(',')] : ['prompt', String(m.qual), String(m.id)];
+      let args = ['prompt', String(m.qual), String(m.id)];
+      if (m.qual === 'artefato') {
+        // os cards que a pessoa colou vão por arquivo temporário (texto livre, pode ser longo)
+        const arq = join(tmpdir(), `liveflow-cards-${process.pid}.txt`);
+        writeFileSync(arq, String(m.texto ?? ''));
+        args = ['prompt', 'artefato', '--de', arq];
+      }
       const r = await cli.chamar(args, false);
       resposta('prompt', r.texto.trim() || r.erro, { qual: m.qual, id: m.id });
       return;
@@ -224,21 +241,6 @@ async function tratarComum(ext: vscode.ExtensionContext, cli: Cli, m: Msg, envia
       const node = vscode.workspace.getConfiguration('liveflow').get<string>('node') || 'node';
       t.sendText(`${node} ${JSON.stringify(join(ext.extensionPath, 'dist', 'cli', 'cli.js'))} gravar ${m.id} --caminho ${JSON.stringify(String(m.caminho || '/'))} --salvar`);
       void vscode.window.showInformationMessage('O navegador vai abrir. Faça o fluxo e feche a janela: os passos entram no card. Depois clique em Recarregar.');
-      return;
-    }
-    case 'branches': {
-      const [bs, atual] = await Promise.all([cli.chamar(['branches', ...(m.atualizar ? ['--atualizar'] : [])]), Promise.resolve(null)]);
-      void atual;
-      const nomes = ((bs.dados as { nome: string; tipo: string }[] | null) ?? []).filter((b) => !/^(main|master|origin\/main|origin\/master)$/.test(b.nome)).map((b) => b.nome);
-      const mapa = nomes.length ? await cli.chamar(['mapear', '--branches', nomes.join(',')]) : { dados: [] };
-      resposta('branches', { branches: bs.dados ?? [], mapa: mapa.dados ?? [], erro: bs.erro });
-      return;
-    }
-    case 'rascunhos': {
-      const r = await cli.chamar(['rascunho', '--branches', (m.branches as string[]).join(','), '--salvar']);
-      void vscode.window.showInformationMessage(`Rascunhos adicionados: ${((r.dados as { adicionados?: string[] } | null)?.adicionados ?? []).join(', ') || 'nenhum'}. Falta o passo a passo de cada um.`);
-      await tratarComum(ext, cli, { tipo: 'recarregar' }, enviar, atualizarLateral);
-      atualizarLateral();
       return;
     }
     case 'definirSegredo': {

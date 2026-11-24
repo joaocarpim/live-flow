@@ -49,10 +49,10 @@ Resultado por card com o commit testado, pendências de conferência manual e vi
 
 **Resolver com Claude** copia o texto e abre o Claude Code no terminal do projeto; você cola e envia. Colar sozinho não é garantido em todo ambiente, por isso o texto sempre vai para a área de transferência.
 
-### Criar cards
-Branches locais e remotas, quais já têm card, **Adicionar rascunhos** e **Pedir os cards ao Claude**.
+### Criar artefato
+Cole os cards do seu quadro (id, título, critérios, branch) e clique em **Gerar texto para o Claude**. O Claude lê o código e escreve o `.liveflow/cards.yaml` com o passo a passo de cada card. Para um card que já existe, a tela do card também tem **Gravar passo a passo no navegador**.
 
-<img src="imagens/08-criar.png" alt="Criar cards">
+<img src="imagens/08-criar.png" alt="Criar artefato">
 
 ### Ambiente e Histórico
 O que falta (com o comando que resolve), segredos, serviços, hook e GitHub Actions. Histórico por card e quarentena.

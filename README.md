@@ -150,7 +150,7 @@ Instalação: baixe o `.vsix` da [última release](https://github.com/joaocarpim
 
 ## Com o Claude Code
 
-O plugin traz a skill **liveflow**: escrever o passo a passo lendo o código das telas, criar cards a partir das branches e corrigir falhas confirmadas, escrevendo antes um teste que reproduz o problema.
+O plugin traz a skill **liveflow**: escrever o passo a passo lendo o código das telas, criar o artefato com os seus cards e corrigir falhas confirmadas, escrevendo antes um teste que reproduz o problema.
 
 ```text
 /plugin install liveflow --marketplace joaocarpim/live-flow
@@ -230,7 +230,7 @@ Não. O passo a passo é YAML com o texto que aparece na tela. Dá para gravar f
 
 <details><summary><b>Por que testar cards e não a branch inteira?</b></summary>
 
-Falha precisa apontar a entrega e o critério. Um fluxo da branch inteira falha vago ("passo 23") e envelhece a cada commit. A branch continua importante: ela diz qual código o card testa e serve para criar cards (`liveflow rascunho --branches feat/x`).
+Falha precisa apontar a entrega e o critério. Um fluxo da branch inteira falha vago ("passo 23") e envelhece a cada commit. A branch continua importante: ela diz qual código o card testa (`branch:` no card).
 </details>
 
 <details><summary><b>Meu frontend e minha API estão em repositórios diferentes.</b></summary>

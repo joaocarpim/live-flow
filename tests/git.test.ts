@@ -24,7 +24,7 @@ test('arquivos mudados são só os da branch desde a base', async () => {
   assert.deepEqual((await arquivosMudados(repo, 'main', 'origin/feat/remota')).map((x) => x.caminho), ['web/pages/agenda.tsx']);
 });
 
-test('mapeia cards por branch e cria rascunho para branch sem card', async () => {
+test('acha os cards de cada branch (contexto para o Claude escrever passos)', async () => {
   const art = lerArtefato(`cards:
   - id: C-01
     titulo: Aprovação
@@ -38,8 +38,7 @@ test('mapeia cards por branch e cria rascunho para branch sem card', async () =>
   const alvos = await alvosDasBranches(repo, 'main', ['feat/aprovacao', 'feat/sem-card', 'origin/feat/remota'], art.cards);
   assert.deepEqual(alvos[0]!.cards.map((c) => c.card.card.id), ['C-01']);
   assert.equal(alvos[1]!.cards.length, 0);
-  assert.equal(alvos[1]!.rascunho!.id, 'B-sem-card');
-  assert.equal(alvos[1]!.rascunho!.titulo, 'relatório em pdf');
+  assert.equal(alvos[1]!.commits[0]!.assunto, 'relatório em pdf');
   assert.deepEqual(alvos[2]!.cards.map((c) => [c.card.card.id, c.motivo]), [['C-07', 'arquivos']]);
 });
 

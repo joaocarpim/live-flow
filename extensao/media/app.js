@@ -22,8 +22,7 @@
     resultados: null,
     problema: null,
     prompts: {},
-    branches: null,
-    selBranches: new Set(),
+    textoCards: '',
     carregando: true,
   };
 
@@ -143,7 +142,7 @@
         aba('blocos', 'Blocos', nSel || null),
         aba('execucao', 'Execução', exec ? 'rodando' : null, 'azul'),
         aba('resultados', 'Resultados', S.resultados ? (falhas ? falhas + ' falha(s)' : S.resultados.length) : null, falhas ? 'verm' : ''),
-        aba('criar', 'Criar cards'),
+        aba('criar', 'Criar artefato'),
         aba('ambiente', 'Ambiente', ambienteFaltas() || null, ambienteFaltas() ? 'verm' : ''),
         aba('historico', 'Histórico'),
       ),
@@ -159,7 +158,6 @@
     S.tela = tela;
     Object.assign(S, extra || {});
     if (tela === 'blocos') pedirBlocos();
-    if (tela === 'criar' && !S.branches) enviar({ tipo: 'branches' });
     window.scrollTo(0, 0);
     render();
   }
@@ -171,10 +169,10 @@
     if (!todos.length) {
       return [h('div', { class: 'vazio' },
         h('h2', {}, 'Este projeto ainda não tem cards'),
-        h('p', {}, 'Crie o artefato .liveflow/cards.yaml de exemplo, ou gere cards a partir das branches.'),
+        h('p', {}, 'O liveflow testa os cards do artefato .liveflow/cards.yaml. Crie o artefato com os seus cards (o Claude escreve o passo a passo) ou comece pelo exemplo.'),
         h('div', { class: 'acoes', style: 'justify-content:center' },
           h('button', { class: 'btn pri', onclick: () => enviar({ tipo: 'acao', qual: 'iniciar' }) }, 'Criar artefato de exemplo'),
-          h('button', { class: 'btn', onclick: () => ir('criar') }, 'Criar cards das branches')))];
+          h('button', { class: 'btn', onclick: () => ir('criar') }, 'Criar artefato com os meus cards')))];
     }
     const prontos = todos.filter((c) => c.estado === 'pronto');
     const b = S.busca.toLowerCase();
@@ -299,8 +297,8 @@
       h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'Modo')),
         h('div', { class: 'modos' }, modos.map(([k, t, d]) => h('button', { class: 'modo' + (S.modoExec === k ? ' on' : ''), onclick: () => { S.modoExec = k; render(); } }, h('b', {}, t), h('span', { class: 'peq mudo' }, d)))),
         h('label', { class: 'acoes', style: 'margin-top:12px;color:' + (um ? 'var(--texto)' : 'var(--mudo)') },
-          h('input', { type: 'checkbox', checked: um && S.aoVivo, disabled: !um, onchange: (e) => { S.aoVivo = e.target.checked; } }),
-          um ? 'Assistir ao vivo (abre o navegador e mostra a tela aqui)' : 'Assistir ao vivo: só com um card. Com mais de um, os testes rodam escondidos e em paralelo quando é seguro.')),
+          h('input', { type: 'checkbox', checked: S.aoVivo, onchange: (e) => { S.aoVivo = e.target.checked; render(); } }),
+          um ? 'Assistir ao vivo (abre o navegador e mostra a tela aqui)' : S.aoVivo ? 'Assistir ao vivo: os cards rodam um por vez e a tela de cada um aparece aqui.' : 'Assistir ao vivo desligado: os cards rodam escondidos, em paralelo quando é seguro.')),
       !p ? h('div', { class: 'cartao mudo' }, 'Montando os blocos…') : h('div', { style: 'display:flex;flex-direction:column;gap:12px' },
         p.blocos.map((b, i) => h('div', { class: 'bloco' },
           h('div', { class: 'bloco-cab' }, h('b', {}, b.sozinho ? 'Sozinho' : 'Bloco ' + (i + 1)), h('span', { class: 'chip' }, svg(I.branch), b.branch || 'checkout atual'), h('span', { class: 'peq mudo' }, b.sozinho ? 'card exclusivo, sem nada em paralelo' : '1 app no ar para o bloco todo')),
@@ -314,7 +312,7 @@
   }
   function comecar() {
     const ids = [...S.sel];
-    enviar({ tipo: 'rodar', ids, modo: S.modoExec, aoVivo: ids.length === 1 && S.aoVivo });
+    enviar({ tipo: 'rodar', ids, modo: S.modoExec, aoVivo: S.aoVivo });
   }
 
   function telaExecucao() {
@@ -331,21 +329,29 @@
       h('span', { class: 'espaco' }),
       !e.fim ? h('button', { class: 'btn perigo', onclick: () => enviar({ tipo: 'parar' }) }, 'Parar') : h('button', { class: 'btn pri', onclick: () => ir('resultados') }, 'Ver resultados'));
     const avisos = e.avisos.length ? h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'Avisos durante o teste')), h('div', { class: 'lista' }, e.avisos.map((a) => h('div', { class: 'linha peq' }, svg(I.alerta, 'var(--ambar)'), h('span', { class: 'm mudo' }, a.card || ''), a.mensagem)))) : null;
+    const naoRodaram = estados.length ? e.ids.filter((id) => e.cards[id] && e.cards[id].resultado === 'nao_rodou' && e.cards[id].msg) : [];
+    const caixaMotivos = e.fim && naoRodaram.length ? h('div', { class: 'aviso verm' }, svg(I.alerta, 'var(--vermelho)'), h('div', {}, naoRodaram.map((id) => h('div', {}, h('b', {}, id + ' não rodou: '), e.cards[id].msg)))) : null;
     if (e.aoVivo) {
-      const id = e.ids[0];
+      const id = e.atual && e.cards[e.atual] ? e.atual : e.ids[0];
       const c = e.cards[id] || { passos: {}, tentativa: 1 };
       const card = cardPorId(id);
-      return [cab,
+      const fila = e.ids.length > 1 ? h('div', { class: 'fila-vivo' }, e.ids.map((x, i) => {
+        const cx = e.cards[x] || {};
+        return h('button', { class: 'btn peq' + (x === id ? ' pri' : ''), onclick: () => { e.atual = x; e.fixado = true; render(); } }, h('span', { class: 'ponto ' + (cx.resultado || (cx.tentativa ? 'rodando' : '')) }), (i + 1) + '. ' + x + ' · ' + (cx.resultado ? ROT[cx.resultado] : cx.tentativa ? 'rodando' : 'na fila'));
+      })) : null;
+      const telaVazia = c.resultado === 'nao_rodou' ? h('div', { style: 'max-width:440px;text-align:center;color:var(--vermelho)' }, h('div', { style: 'font-weight:600;margin-bottom:6px' }, 'Não rodou'), c.msg || '') : h('span', {}, c.tentativa ? 'Abrindo o navegador…' : e.fase || 'Preparando a cópia da branch e subindo o app…');
+      return [cab, caixaMotivos, fila,
         h('div', { class: 'ao-vivo' },
           h('div', { class: 'navegador' },
-            h('div', { class: 'nav-barra' }, h('span', { class: 'bolas' }, h('i'), h('i'), h('i')), h('span', { class: 'nav-url' }, c.url || 'aguardando o app subir…'), !e.fim ? h('span', { class: 'vivo' }, 'AO VIVO') : null),
-            h('div', { class: 'nav-tela' }, c.imagem ? h('img', { src: c.imagem, alt: 'Tela do teste no passo ' + (c.passoAtual || '') }) : h('span', {}, e.fase || 'Preparando a cópia da branch e subindo o app…'))),
+            h('div', { class: 'nav-barra' }, h('span', { class: 'bolas' }, h('i'), h('i'), h('i')), h('span', { class: 'nav-url' }, c.url || (c.resultado ? '—' : 'aguardando o app subir…')), !e.fim && !c.resultado ? h('span', { class: 'vivo' }, 'AO VIVO') : null),
+            h('div', { class: 'nav-tela' }, c.imagem ? h('img', { src: c.imagem, alt: 'Tela do teste no passo ' + (c.passoAtual || '') }) : telaVazia)),
           h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, id + ' · passo a passo'), h('span', { class: 'espaco' }), c.tentativa > 1 ? h('span', { class: 'pill ambar' }, 'repetindo: tentativa ' + c.tentativa + ' de 3') : null),
             listaPassosVivos(card, c))),
         avisos];
     }
     return [cab,
-      h('div', { class: 'aviso' }, svg(I.info, 'var(--azul)'), h('span', {}, 'Com mais de um card os testes rodam escondidos, sem a opção de assistir. Cada falha repete até 3 vezes antes de ser confirmada; vídeo, prints e trace ficam salvos.')),
+      caixaMotivos,
+      h('div', { class: 'aviso' }, svg(I.info, 'var(--azul)'), h('span', {}, 'Rodando escondido (sem assistir ao vivo). Para ver um card por vez na tela, marque "Assistir ao vivo" na aba Blocos. Cada falha repete até 3 vezes antes de ser confirmada; vídeo, prints e trace ficam salvos.')),
       e.fase ? h('div', { class: 'peq mudo' }, e.fase) : null,
       h('div', { class: 'cartao' }, h('div', { class: 'lista' }, e.ids.map((id) => {
         const c = e.cards[id] || { passos: {}, tentativa: 0 };
@@ -456,31 +462,20 @@
   }
 
   function telaCriar() {
-    const d = S.branches;
-    const sel = S.selBranches;
-    const chave = 'artefato:' + [...sel].join(',');
+    const chave = 'artefato';
+    const texto = S.prompts[chave];
     return [
-      h('div', { class: 'cab' }, h('h1', {}, 'Criar cards a partir das branches'), h('span', { class: 'espaco' }),
-        h('button', { class: 'btn', onclick: () => { S.branches = null; enviar({ tipo: 'branches', atualizar: true }); render(); } }, svg(I.recarregar), 'Buscar remotas (git fetch)')),
-      h('div', { class: 'aviso' }, svg(I.info, 'var(--azul)'), h('span', {}, 'O liveflow testa cards. As branches servem para criar os cards: o rascunho entra no cards.yaml com id, título e arquivos, sem passos; o passo a passo vem do Claude ou da gravação.')),
-      !d ? h('div', { class: 'cartao mudo' }, 'Lendo as branches…') : h('div', { class: 'cartao' }, h('div', { class: 'lista' }, d.branches.filter((b) => !/^(main|master|origin\/main|origin\/master)$/.test(b.nome)).map((b) => {
-        const m = (d.mapa || []).find((x) => x.branch === b.nome);
-        const tem = m && m.cards.length;
-        return h('label', { class: 'linha', style: 'cursor:pointer' },
-          h('input', { type: 'checkbox', checked: sel.has(b.nome), onchange: (e) => { e.target.checked ? sel.add(b.nome) : sel.delete(b.nome); render(); } }),
-          h('span', { class: 'chip' }, b.tipo === 'local' ? 'local' : 'remota'),
-          h('span', { class: 'm', style: 'flex:1' }, b.nome),
-          m ? h('span', { class: 'peq mudo' }, m.commits.length + ' commit(s) · ' + m.arquivos.length + ' arquivo(s)') : null,
-          tem ? h('span', { class: 'pill verde' }, 'card: ' + m.cards.map((c) => c.card.card.id).join(', ')) : h('span', { class: 'pill ambar' }, m && m.rascunho ? 'sem card · rascunho ' + m.rascunho.id : 'sem card'));
-      }))),
-      h('div', { class: 'acoes' },
-        h('button', { class: 'btn pri', disabled: !sel.size, onclick: () => enviar({ tipo: 'rascunhos', branches: [...sel] }) }, 'Adicionar rascunhos ao cards.yaml'),
-        h('button', { class: 'btn', disabled: !sel.size, onclick: () => { enviar({ tipo: 'prompt', qual: 'artefato', branches: [...sel] }); S.promptArtefato = chave; render(); } }, svg(I.lampada), 'Pedir os cards ao Claude')),
-      S.promptArtefato && S.prompts[S.promptArtefato] !== undefined ? h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'Texto para o Claude')),
-        h('textarea', { class: 'prompt', oninput: (e) => { S.prompts[S.promptArtefato] = e.target.value; } }, S.prompts[S.promptArtefato]),
+      h('div', { class: 'cab' }, h('h1', {}, 'Criar artefato')),
+      h('div', { class: 'aviso' }, svg(I.info, 'var(--azul)'), h('span', {}, 'O liveflow testa cards, e os cards vivem no artefato .liveflow/cards.yaml. Cole abaixo os cards do seu quadro (id, título, descrição, critérios e a branch onde foram feitos). O Claude lê o código e escreve o artefato com o passo a passo de cada um. Para um card que já existe, também dá para gravar o passo a passo fazendo o fluxo no navegador (botão "Gravar passo a passo no navegador", na tela do card).')),
+      h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'Seus cards')),
+        h('textarea', { class: 'prompt', placeholder: 'C-10 · Cliente aceita o orçamento pelo link (branch feat/aceite)\nCritérios:\n1. O cliente abre o link e vê o valor total\n2. Ao aceitar, o status vira "aprovado"', oninput: (e) => { S.textoCards = e.target.value; } }, S.textoCards),
         h('div', { class: 'acoes', style: 'margin-top:12px' },
-          h('button', { class: 'btn pri', onclick: () => enviar({ tipo: 'claude', texto: S.prompts[S.promptArtefato] }) }, 'Resolver com Claude'),
-          h('button', { class: 'btn', onclick: () => enviar({ tipo: 'copiar', texto: S.prompts[S.promptArtefato] }) }, 'Copiar'))) : null,
+          h('button', { class: 'btn pri', onclick: () => { enviar({ tipo: 'prompt', qual: 'artefato', texto: S.textoCards }); S.promptArtefato = chave; render(); } }, svg(I.lampada), 'Gerar texto para o Claude'))),
+      S.promptArtefato && texto !== undefined ? h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'Texto para o Claude')),
+        h('textarea', { class: 'prompt', oninput: (e) => { S.prompts[chave] = e.target.value; } }, texto),
+        h('div', { class: 'acoes', style: 'margin-top:12px' },
+          h('button', { class: 'btn pri', onclick: () => enviar({ tipo: 'claude', texto: S.prompts[chave] }) }, 'Resolver com Claude'),
+          h('button', { class: 'btn', onclick: () => enviar({ tipo: 'copiar', texto: S.prompts[chave] }) }, 'Copiar'))) : null,
     ];
   }
 
@@ -584,7 +579,7 @@
     switch (ev.tipo) {
       case 'copia_pronta': e.fase = 'Cópia de ' + ev.ref + ' pronta' + (ev.dependencias === 'reaproveitadas' ? ' (dependências reaproveitadas)' : '') + (ev.observacao ? ' · ' + ev.servico + ': ' + ev.observacao : ''); break;
       case 'app_no_ar': e.fase = 'App no ar em ' + ev.url; break;
-      case 'card_inicio': c.msg = 'começando'; break;
+      case 'card_inicio': c.msg = 'começando'; if (e.ids.includes(id) && !e.fixado) e.atual = id; break;
       case 'tentativa': c.tentativa = ev.n; c.passos = {}; c.msg = ev.n > 1 ? 'repetindo para confirmar' : 'rodando'; break;
       case 'passo_inicio': c.passos[ev.n] = { estado: 'rodando' }; c.passoAtual = ev.n; c.msg = 'passo ' + ev.n + ': ' + ev.descricao; break;
       case 'passo_ok': c.passos[ev.n] = { estado: 'ok', ms: ev.ms }; break;
@@ -603,7 +598,6 @@
       case 'plano': S.plano[d.id] = d.dados; break;
       case 'blocos': if (JSON.stringify(d.ids) === JSON.stringify(S.blocosIds)) S.blocos = d.dados; break;
       case 'prompt': S.prompts[d.qual === 'artefato' ? S.promptArtefato : d.qual + ':' + d.id] = d.dados; break;
-      case 'branches': S.branches = d.dados; break;
       case 'navegar': {
         const dest = d.destino || {};
         if (dest.ids) S.sel = new Set(dest.ids);

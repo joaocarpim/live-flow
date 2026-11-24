@@ -1,7 +1,6 @@
 // Textos prontos para o Claude. A IA só escreve (passos, correções); quem roda é o liveflow, sem IA.
 // Nunca entram senhas, tokens ou valores de segredos: só os nomes.
 import { ACOES } from './tipos.ts';
-import type { AlvoBranch } from './fontes.ts';
 import type { Card } from './tipos.ts';
 
 const REGRAS_PASSOS = `Formato de cada passo (uma ação por passo, só estas: ${ACOES.join(', ')}):
@@ -36,26 +35,22 @@ export function promptPassos(card: Card, contexto?: { arquivos: string[]; commit
   return linhas.filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').trim();
 }
 
-export function promptArtefatoDasBranches(alvos: AlvoBranch[]): string {
-  const blocos = alvos.map((a) => {
-    const r = a.rascunho;
-    return [
-      `Branch ${a.branch} (${a.commits.length} commit(s), ${a.arquivos.length} arquivo(s))${r ? ` · rascunho: ${r.id}` : ` · já tem card: ${a.cards.map((c) => c.card.card.id).join(', ')}`}`,
-      ...a.commits.slice(0, 8).map((c) => `  commit: ${c.assunto}`),
-      ...a.arquivos.slice(0, 25).map((f) => `  arquivo: ${f}`),
-    ].join('\n');
-  });
+/** Texto para o Claude criar (ou completar) o artefato .liveflow/cards.yaml a partir dos cards da pessoa. */
+export function promptArtefato(cardsDaPessoa: string, jaExistem: string[]): string {
+  const texto = cardsDaPessoa.trim();
   return [
-    'Crie ou complete o arquivo .liveflow/cards.yaml do liveflow a partir destas branches.',
-    'Um card por entrega que faça sentido para quem usa o sistema (uma branch pode virar mais de um card).',
-    'Cada card: id, titulo, descricao, branch, criterios e como_testar.',
+    'Crie ou complete o arquivo .liveflow/cards.yaml do liveflow com estes cards.',
+    'Cada card do artefato: id, titulo, descricao, branch (a branch onde o card foi feito), arquivos, criterios e como_testar (o passo a passo completo).',
+    'Leia o código da aplicação para escrever passos que existem de verdade na tela: textos de botão, rótulos de campo e caminhos reais.',
+    jaExistem.length ? `Já existem no artefato: ${jaExistem.join(', ')}. Complete os que estiverem sem passos e não duplique.` : '',
     '',
-    ...blocos,
+    texto ? 'Cards:' : 'Cards: use os que eu passar nesta conversa (id, título, descrição, critérios e branch).',
+    texto,
     '',
     REGRAS_PASSOS,
     '',
     'Não altere código da aplicação. No fim, rode "liveflow cards" e confirme que todos aparecem como prontos.',
-  ].join('\n');
+  ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').trim();
 }
 
 export interface FalhaParaCorrigir {

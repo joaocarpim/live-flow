@@ -116,9 +116,27 @@ test('vizinho que passa na base e quebra na branch é regressão desta branch', 
   assert.deepEqual(r!.vizinhos.map((v) => [v.card, v.resultado]), [['C-02', 'quebrou_nesta_branch']]);
 });
 
-test('com mais de um card, nunca roda ao vivo', async () => {
+test('ao vivo com mais de um card: roda um por vez, cada um ao vivo', async () => {
+  const vistos: [string, boolean][] = [];
+  let rodando = 0;
+  let maximo = 0;
+  const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-01', 'C-09'], async (e) => {
+    rodando++;
+    maximo = Math.max(maximo, rodando);
+    vistos.push([e.card, e.aoVivo]);
+    await new Promise((ok) => setTimeout(ok, 50));
+    rodando--;
+    return 0;
+  }, { aoVivo: true, aoVivoCards: ['C-01', 'C-09'] });
+  o.artefato.sistema.paralelo = 4;
+  await executar(o);
+  assert.deepEqual(vistos.map((v) => v[1]), [true, true]);
+  assert.equal(maximo, 1, 'nunca dois ao mesmo tempo');
+});
+
+test('sem ao vivo, nenhum card abre o navegador visível', async () => {
   const vistos: boolean[] = [];
-  const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-01', 'C-09'], async (e) => (vistos.push(e.aoVivo), 0), { aoVivo: true });
+  const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-01', 'C-09'], async (e) => (vistos.push(e.aoVivo), 0));
   await executar(o);
   assert.deepEqual(vistos, [false, false]);
 });
@@ -186,7 +204,7 @@ test('Parar: desliga o app da branch e remove a cópia, mesmo no meio do teste',
 
 test('ao vivo: o card escolhido roda ao vivo e a dependência incluída roda escondida', async () => {
   const vistos: [string, boolean][] = [];
-  const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-11'], async (e) => (vistos.push([e.card, e.aoVivo]), 0), { aoVivo: true, aoVivoCard: 'C-11' });
+  const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-11'], async (e) => (vistos.push([e.card, e.aoVivo]), 0), { aoVivo: true, aoVivoCards: ['C-11'] });
   await executar(o);
   assert.deepEqual(vistos, [['C-01', false], ['C-11', true]]);
 });

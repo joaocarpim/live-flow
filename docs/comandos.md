@@ -21,24 +21,21 @@ Opções de `rodar`:
 | Opção | Padrão | O que faz |
 |---|---|---|
 | `--modo rapido\|completo\|noturno` | `completo` | rápido: fluxo; completo: + vizinhos; noturno: + carga e teste longo (quando existirem) |
-| `--ao-vivo` | | navegador visível (só com um card escolhido; dependências rodam escondidas) |
+| `--ao-vivo` | | navegador visível; com vários cards, roda um por vez mostrando cada um (dependências rodam escondidas). Sem tela para a janela, roda escondido e manda a tela para a extensão |
 | `--junit <arquivo>` | | relatório JUnit para o CI |
 | `--pasta <dir>` | `.liveflow/execucoes/<data>` | onde gravar evidências e eventos |
 | `--json` | | resultado em JSON no fim |
 
 Código de saída: `0` se nada falhou; `1` se algum card falhou de forma confirmada ou quebrou um vizinho; `130` se foi interrompido (Ctrl+C ou "Parar"), depois de desligar apps e remover as cópias.
 
-## Criar cards
+## Criar o artefato
 
 | Comando | O que faz |
 |---|---|
 | `liveflow iniciar` | cria `.liveflow/cards.yaml` de exemplo |
-| `liveflow branches [--sem-remotas] [--atualizar]` | lista branches locais e remotas; `--atualizar` faz `git fetch --all --prune` |
-| `liveflow mapear --branches a,b` | quais branches já têm card (pela `branch:` ou pelos `arquivos`) |
-| `liveflow rascunho --branches a,b [--salvar]` | rascunho determinístico (id, título do commit, arquivos), sem passos |
+| `liveflow prompt artefato [--de cards.txt]` | texto para o Claude criar o artefato com os seus cards (o arquivo traz os cards do seu quadro: id, título, critérios, branch) |
+| `liveflow prompt passos <card>` | texto para o Claude escrever o passo a passo de um card |
 | `liveflow gravar <card> [--caminho /x] [--salvar]` | grava o passo a passo enquanto você faz o fluxo |
-| `liveflow prompt passos <card>` | texto para o Claude escrever o passo a passo |
-| `liveflow prompt artefato --branches a,b` | texto para o Claude criar os cards das branches |
 
 ## Ambiente e manutenção
 
