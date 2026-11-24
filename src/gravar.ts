@@ -2,9 +2,9 @@
 // Grava pelo que a pessoa vê (texto do botão, rótulo do campo), nunca por seletor de CSS.
 // Senhas nunca são gravadas: viram {{segredo:senha}}.
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseDocument } from 'yaml';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { caminhoArtefato } from './artefato.ts';
 
 export interface PassoGravado {
@@ -98,4 +98,17 @@ export function salvarPassos(raiz: string, cardId: string, passos: PassoGravado[
   if (i < 0) throw new Error(`Card ${cardId} não existe no artefato.`);
   doc.setIn(['cards', i, 'como_testar'], doc.createNode(passos));
   writeFileSync(arq, doc.toString());
+}
+
+/** Acrescenta cards (rascunhos) ao artefato sem mexer nos que existem. Devolve os ids adicionados. */
+export function adicionarCards(raiz: string, cards: Record<string, unknown>[]): string[] {
+  const arq = caminhoArtefato(raiz);
+  const doc = parseDocument(existsSync(arq) ? readFileSync(arq, 'utf8') : 'versao: 1\ncards: []\n');
+  const existentes = new Set(((doc.toJS() as { cards?: { id?: string }[] }).cards ?? []).map((c) => c.id));
+  const novos = cards.filter((c) => !existentes.has(String(c.id)));
+  if (!doc.has('cards')) doc.set('cards', doc.createNode([]));
+  for (const c of novos) doc.addIn(['cards'], doc.createNode(c));
+  mkdirSync(dirname(arq), { recursive: true });
+  writeFileSync(arq, doc.toString());
+  return novos.map((c) => String(c.id));
 }

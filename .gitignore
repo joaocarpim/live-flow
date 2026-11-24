@@ -1,3 +1,5 @@
 node_modules/
 dist/
 .liveflow/execucoes/
+extensao/dist/
+extensao/*.vsix

@@ -335,6 +335,11 @@ async function principal(): Promise<void> {
       s = await sessaoDe(p.como);
       const guardou = await executarPasso(s, p);
       emitir({ tipo: 'passo_ok', n: p.n, ms: Date.now() - comeco, ...(guardou ? { guardou } : {}) });
+      if (entrada.aoVivo) {
+        // quadro para a extensão mostrar a tela ao vivo dentro do painel
+        const quadro = join(entrada.pastaSaida, `quadro-${p.n}.jpg`);
+        await s.page.screenshot({ path: quadro, type: 'jpeg', quality: 60 }).then(() => emitir({ tipo: 'quadro', n: p.n, arquivo: quadro, url: s!.page.url(), como: p.como }), () => undefined);
+      }
     } catch (e) {
       const erro = e instanceof ErroPasso ? e : new ErroPasso('tempo', String((e as Error).message).split('\n')[0] ?? 'erro');
       const pagina = s?.page ?? sessoes.get(p.como ?? '')?.page;

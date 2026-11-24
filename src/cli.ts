@@ -12,7 +12,8 @@ import type { Modo } from './plano.ts';
 import { promptArtefatoDasBranches, promptPassos, promptResolver } from './prompts.ts';
 import { Registro } from './eventos.ts';
 import { executar, subirParaUso } from './executar.ts';
-import { gravar, salvarPassos } from './gravar.ts';
+import { adicionarCards, gravar, salvarPassos } from './gravar.ts';
+import { diagnosticar } from './ambiente.ts';
 import { junit, lerHistorico, quarentena } from './relatorios.ts';
 import { gerarWorkflow, instalarHook, segredosUsados } from './integracoes.ts';
 import type { ResultadoCard } from './executar.ts';
@@ -62,6 +63,7 @@ const { values: op, positionals } = parseArgs({
     salvar: { type: 'boolean', default: false },
     'sem-janela': { type: 'boolean', default: false },
     forcar: { type: 'boolean', default: false },
+    pasta: { type: 'string' },
     repo: { type: 'string' },
     ajuda: { type: 'boolean', short: 'h', default: false },
   },
@@ -113,7 +115,12 @@ async function main(): Promise<number> {
           const r = a.rascunho!;
           return { id: r.id, titulo: r.titulo, branch: r.branch, arquivos: r.arquivos, criterios: [], como_testar: [] };
         });
-        console.log(cards.length ? stringify({ cards }) : '# Todas as branches já têm card.');
+        if (op.salvar && cards.length) {
+          const novos = adicionarCards(repo, cards);
+          console.log(op.json ? JSON.stringify({ adicionados: novos }) : `Adicionados ao artefato: ${novos.join(', ') || 'nenhum (já existiam)'}.`);
+          return 0;
+        }
+        console.log(op.json ? JSON.stringify({ cards }) : cards.length ? stringify({ cards }) : '# Todas as branches já têm card.');
         return 0;
       }
       saida(alvos, () =>
@@ -173,7 +180,7 @@ async function main(): Promise<number> {
         console.error('Nada para testar.');
         return 1;
       }
-      const pasta = join(repo, '.liveflow', 'execucoes', new Date().toISOString().replace(/[:.]/g, '-'));
+      const pasta = op.pasta ?? join(repo, '.liveflow', 'execucoes', new Date().toISOString().replace(/[:.]/g, '-'));
       const registro = new Registro(join(pasta, 'events.ndjson'));
       if (!op.json) registro.ouvintes.push(mostrarAoVivo);
       const res = await executar({ repo, artefato: art, blocos: plano.blocos, aoVivo: op['ao-vivo']!, modo, registro, pasta });
@@ -198,6 +205,17 @@ async function main(): Promise<number> {
         console.log(promptResolver({ card: c.card, branch: r.branch, passo: r.falha.passo, descricaoPasso: r.falha.descricao, erro: r.falha.erro, tentativas: r.tentativas, bancoZerado: r.bancoZerado ?? false, ...(r.falha.sugestoes ? { sugestoes: r.falha.sugestoes } : {}), ...(r.falha.url ? { url: r.falha.url } : {}), evidencias: [r.falha.print, join(r.pasta, `tentativa-${r.tentativas}`, 'trace.zip')].filter((x): x is string => !!x) }));
       } else throw new Error('Use: prompt passos <card> | prompt artefato --branches a,b | prompt resolver <card>');
       return 0;
+    }
+    case 'segredos': {
+      const texto = existsSync(join(repo, CAMINHO_ARTEFATO)) ? readFileSync(join(repo, CAMINHO_ARTEFATO), 'utf8') : '';
+      const nomes = segredosUsados(texto).map((n) => ({ nome: n, variavel: `LIVEFLOW_SEGREDO_${n.toUpperCase()}`, definido: process.env[`LIVEFLOW_SEGREDO_${n.toUpperCase()}`] !== undefined }));
+      saida(nomes, () => nomes.map((n) => `${n.definido ? '✓' : '✗'} ${n.nome}  (${n.variavel})`).join('\n') || 'O artefato não usa segredos.');
+      return 0;
+    }
+    case 'ambiente': {
+      const info = await diagnosticar(repo, art);
+      saida(info, () => info.itens.map((i) => `${i.ok ? '✓' : '✗'} ${i.nome.padEnd(28)} ${i.detalhe}`).join('\n'));
+      return info.itens.every((i) => i.ok || i.opcional) ? 0 : 1;
     }
     case 'gravar': {
       const c = art.cards.find((x) => x.card.id === args[0]);
