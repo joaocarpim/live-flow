@@ -2,7 +2,7 @@
 
 Testa o fluxo de tela de cada card, em blocos, de forma determinística, antes de entregar.
 CLI em Node 22 (TypeScript rodando direto, sem build no desenvolvimento) + extensão do VS Code (`extensao/`) + plugin do Claude Code (`plugin/`) + GitHub Action (`action.yml`). Documentação de uso em `docs/`; demo em `exemplo/`.
-Logo: commits formando um check (`assets/logo-liveflow.svg`). Independente do safemerge.
+Logo: commits formando um check dentro de um hexágono de quinas arredondadas (`assets/logo-liveflow.svg`). Independente do safemerge.
 
 ## Princípios (não negociáveis)
 

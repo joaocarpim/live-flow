@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4 (2026-11-24)
+
+- Nova logo: o check de commits agora fica dentro de um hexágono de quinas levemente arredondadas. Vale para o ícone da extensão, o ícone da barra lateral e as logos em `assets/`.
+
 ## 0.1.3 (2026-11-24)
 
 - Ícone da extensão corrigido: o PNG tinha sido gerado cortado (só o canto do fundo). Agora é a logo inteira em 256 px.
