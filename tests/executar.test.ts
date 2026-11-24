@@ -167,3 +167,26 @@ test('frontend e API em repositórios separados: cada um no código certo, e ano
   assert.match(vistos['C-01']!, /aprovacao/);
   assert.match(vistos['C-05']!, /base/, 'feat/sem-card não muda o app.mjs');
 });
+
+test('Parar: desliga o app da branch e remove a cópia, mesmo no meio do teste', async () => {
+  const { pararTudo } = await import('../src/executar.ts');
+  const { o, pasta } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-01'], () => new Promise<number>(() => undefined));
+  let url = '';
+  const noAr = new Promise<void>((ok) => o.registro.ouvintes.push((e) => { if (e.tipo === 'app_no_ar') { url = String(e.url); ok(); } }));
+  void executar(o); // nunca termina sozinho: o executor falso fica parado
+  await noAr;
+  assert.equal((await fetch(url)).status, 200, 'app no ar antes de parar');
+  await pararTudo();
+  await new Promise((ok) => setTimeout(ok, 500));
+  await assert.rejects(fetch(url, { signal: AbortSignal.timeout(1500) }), 'o app foi desligado');
+  const copias = g(repo, 'worktree', 'list').trim().split('\n');
+  assert.equal(copias.length, 1, `só o checkout da pessoa sobra: ${copias.join(' | ')}`);
+  void pasta;
+});
+
+test('ao vivo: o card escolhido roda ao vivo e a dependência incluída roda escondida', async () => {
+  const vistos: [string, boolean][] = [];
+  const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-11'], async (e) => (vistos.push([e.card, e.aoVivo]), 0), { aoVivo: true, aoVivoCard: 'C-11' });
+  await executar(o);
+  assert.deepEqual(vistos, [['C-01', false], ['C-11', true]]);
+});

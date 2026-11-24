@@ -119,6 +119,8 @@ export interface Sistema {
   email?: { mailpit: string };
   /** Reaproveitar node_modules quando o lockfile da branch é igual ao do seu checkout. */
   reaproveitarDependencias: boolean;
+  /** Por quantos dias guardar prints, vídeos e traces das execuções (0 = para sempre). */
+  guardarDias: number;
   /** Comando que zera o banco de teste antes de cada tentativa. Pode usar {{execucao}}. */
   seed?: string;
   /** Quantos fluxos ao mesmo tempo. Só passa de 1 se cada execução tiver app e banco próprios. */

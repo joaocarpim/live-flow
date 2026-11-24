@@ -1,5 +1,5 @@
 // Relatórios a partir dos resultados: JUnit (para CI) e histórico com quarentena de instáveis.
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ResultadoCard } from './executar.ts';
 
@@ -55,4 +55,25 @@ export function quarentena(h: Map<string, LinhaHistorico[]>): { card: string; in
     if (instaveis >= 2) saida.push({ card, instaveis, de: ult.length });
   }
   return saida.sort((a, b) => b.instaveis - a.instaveis);
+}
+
+/**
+ * Apaga execuções mais antigas que N dias (prints, vídeos e traces podem ter dados pessoais).
+ * Devolve as pastas apagadas. dias = 0 não apaga nada.
+ */
+export function limparExecucoes(raiz: string, dias: number, agora = Date.now()): string[] {
+  const base = join(raiz, '.liveflow', 'execucoes');
+  if (!dias || !existsSync(base)) return [];
+  const limite = agora - dias * 24 * 60 * 60 * 1000;
+  const apagadas: string[] = [];
+  for (const d of readdirSync(base)) {
+    const p = join(base, d);
+    try {
+      if (statSync(p).isDirectory() && statSync(p).mtimeMs < limite) {
+        rmSync(p, { recursive: true, force: true });
+        apagadas.push(d);
+      }
+    } catch { /* outra execução mexendo: deixa para a próxima */ }
+  }
+  return apagadas;
 }

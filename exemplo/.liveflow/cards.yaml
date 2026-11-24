@@ -1,0 +1,125 @@
+# Cards da Marmoraria Pedra Fina (exemplo do liveflow).
+versao: 1
+sistema:
+  url: http://127.0.0.1:{{porta}}
+  permitidos: [127.0.0.1, localhost]
+  producao: [app.pedrafina.com.br]
+  base: main
+  iniciar: node app/servidor.mjs {{porta}}
+  saude: /login
+  seed: node app/seed.mjs            # zera os dados antes de cada tentativa
+  email: { mailpit: "{{url}}/__mailpit" }
+  guardar_dias: 14
+
+variaveis:
+  cliente_email: cliente@construtora.local
+
+contas:
+  tecnico:
+    entrar:
+      - abrir: /login
+      - preencher: { campo: E-mail, valor: tecnico@pedrafina.local }
+      - preencher: { campo: Senha, valor: "{{segredo:senha}}" }
+      - clicar: Entrar
+    verificar: [ { abrir: /painel }, { ver_texto: Sair } ]
+    reaproveitar: sim
+  cliente:
+    entrar:
+      - abrir: /login
+      - preencher: { campo: E-mail, valor: "{{cliente_email}}" }
+      - preencher: { campo: Senha, valor: "{{segredo:senha}}" }
+      - clicar: Entrar
+
+cards:
+  - id: C-01
+    titulo: Login da equipe
+    branch: feat/aceite
+    arquivos: [app/servidor.mjs]
+    criterios:
+      - Técnico com a senha certa entra no painel
+      - Senha errada mostra aviso
+    como_testar:
+      - abrir: /login
+      - preencher: { campo: E-mail, valor: tecnico@pedrafina.local }
+      - preencher: { campo: Senha, valor: "{{segredo:senha}}" }
+      - clicar: Entrar
+      - ver_url: /painel
+      - ver_texto: Olá, Rafael (técnico)
+        criterio: 1
+      - abrir: /sair
+      - preencher: { campo: E-mail, valor: tecnico@pedrafina.local }
+      - preencher: { campo: Senha, valor: senha-errada }
+      - clicar: Entrar
+      - ver_texto: E-mail ou senha incorretos
+        criterio: 2
+
+  - id: C-02
+    titulo: Técnico envia as fotos e o cliente aceita o orçamento
+    branch: feat/aceite
+    depende_de: [C-01]
+    altera: [orcamentos]
+    criterios:
+      - O técnico cria o orçamento e envia as fotos da vistoria
+      - O cliente aceita pelo link
+    como_testar:
+      - abrir: /painel
+        como: tecnico
+      - clicar: Criar orçamento
+        como: tecnico
+      - guardar: { nome: orc, da_url: "/orcamentos/(\\d+)" }
+        como: tecnico
+      - enviar_arquivo: { campo: Fotos, arquivos: [.liveflow/arquivos/vistoria.jpg] }
+        como: tecnico
+      - clicar: Enviar fotos
+        como: tecnico
+      - ver_texto: 1 foto(s) recebida(s)
+        como: tecnico
+        criterio: 1
+      - abrir: /aceite/{{orc}}
+        como: cliente
+      - clicar: Aceitar orçamento
+        como: cliente
+      - ver_texto: Orçamento {{orc}} aceito por Construtora Alvorada
+        como: cliente
+        criterio: 2
+      - conferir_manual: O PDF do orçamento sai com a logo da marmoraria
+
+  - id: C-03
+    titulo: Agenda do técnico no celular
+    branch: feat/aceite
+    dispositivo: celular
+    como_testar:
+      - abrir: /agenda
+        como: tecnico
+      - ver_texto: Agenda de hoje
+        como: tecnico
+      - ver_texto: 15:30 · Instalação
+        como: tecnico
+
+  - id: C-04
+    titulo: Recuperar a senha pelo e-mail
+    branch: feat/aceite
+    criterios: [O link que chega por e-mail abre a tela de nova senha]
+    como_testar:
+      - abrir: /esqueci
+      - preencher: { campo: E-mail, valor: tecnico@pedrafina.local }
+      - clicar: Enviar link
+      - ver_texto: Enviamos um link para o seu e-mail
+      - ver_email: { para: tecnico@pedrafina.local, assunto: Redefinir, guardar_link: { nome: link, contem: /redefinir } }
+      - abrir: "{{link}}"
+      - ver_texto: Nova senha
+        criterio: 1
+
+  - id: C-05
+    titulo: Aceite na branch em que o botão foi renomeado
+    branch: feat/botao-renomeado
+    como_testar:
+      - abrir: /aceite/1042
+        como: cliente
+      - clicar: Aceitar orçamento
+        como: cliente
+      - ver_texto: aceito
+
+  - id: C-06
+    titulo: Relatório mensal em PDF
+    branch: feat/relatorio

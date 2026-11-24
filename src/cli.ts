@@ -11,10 +11,10 @@ import { montarPlano } from './plano.ts';
 import type { Modo } from './plano.ts';
 import { promptArtefatoDasBranches, promptPassos, promptResolver } from './prompts.ts';
 import { Registro } from './eventos.ts';
-import { executar, subirParaUso } from './executar.ts';
+import { executar, pararTudo, subirParaUso } from './executar.ts';
 import { adicionarCards, gravar, salvarPassos } from './gravar.ts';
 import { diagnosticar } from './ambiente.ts';
-import { junit, lerHistorico, quarentena } from './relatorios.ts';
+import { junit, lerHistorico, limparExecucoes, quarentena } from './relatorios.ts';
 import { gerarWorkflow, instalarHook, segredosUsados } from './integracoes.ts';
 import type { ResultadoCard } from './executar.ts';
 
@@ -30,6 +30,7 @@ Testar
   liveflow rodar --regressao             cards entregues, no código da base (toda noite)
         [--junit arquivo.xml]            relatório para CI
   liveflow historico [card...]           últimas execuções e quarentena de instáveis
+  liveflow limpar [--dias 14]            apaga evidências antigas (prints, vídeos, traces)
   liveflow prompt resolver <card>        texto para o Claude corrigir a última falha
 
 Criar cards
@@ -64,6 +65,7 @@ const { values: op, positionals } = parseArgs({
     'sem-janela': { type: 'boolean', default: false },
     forcar: { type: 'boolean', default: false },
     pasta: { type: 'string' },
+    dias: { type: 'string' },
     repo: { type: 'string' },
     ajuda: { type: 'boolean', short: 'h', default: false },
   },
@@ -180,10 +182,12 @@ async function main(): Promise<number> {
         console.error('Nada para testar.');
         return 1;
       }
+      const apagadas = limparExecucoes(repo, art.sistema.guardarDias);
+      if (apagadas.length && !op.json) console.log(`Apaguei ${apagadas.length} execução(ões) com mais de ${art.sistema.guardarDias} dias (sistema.guardar_dias).`);
       const pasta = op.pasta ?? join(repo, '.liveflow', 'execucoes', new Date().toISOString().replace(/[:.]/g, '-'));
       const registro = new Registro(join(pasta, 'events.ndjson'));
       if (!op.json) registro.ouvintes.push(mostrarAoVivo);
-      const res = await executar({ repo, artefato: art, blocos: plano.blocos, aoVivo: op['ao-vivo']!, modo, registro, pasta });
+      const res = await executar({ repo, artefato: art, blocos: plano.blocos, aoVivo: op['ao-vivo']! && ids.length === 1, ...(ids.length === 1 ? { aoVivoCard: ids[0]! } : {}), modo, registro, pasta });
       if (op.junit) writeFileSync(op.junit, junit(res));
       if (op.json) console.log(JSON.stringify(res, null, 2));
       else resumo(res, pasta);
@@ -204,6 +208,13 @@ async function main(): Promise<number> {
         if (!r?.falha || !c) throw new Error(`Nenhuma falha registrada para ${id ?? '(nenhum)'}. Rode o card primeiro.`);
         console.log(promptResolver({ card: c.card, branch: r.branch, passo: r.falha.passo, descricaoPasso: r.falha.descricao, erro: r.falha.erro, tentativas: r.tentativas, bancoZerado: r.bancoZerado ?? false, ...(r.falha.sugestoes ? { sugestoes: r.falha.sugestoes } : {}), ...(r.falha.url ? { url: r.falha.url } : {}), evidencias: [r.falha.print, join(r.pasta, `tentativa-${r.tentativas}`, 'trace.zip')].filter((x): x is string => !!x) }));
       } else throw new Error('Use: prompt passos <card> | prompt artefato --branches a,b | prompt resolver <card>');
+      return 0;
+    }
+    case 'limpar': {
+      const dias = op.dias !== undefined ? Number(op.dias) : art.sistema.guardarDias;
+      if (!Number.isFinite(dias) || dias < 0) throw new Error('Use --dias com um número de dias (0 apaga todas as execuções).');
+      const apagadas = limparExecucoes(repo, dias === 0 ? 1e-9 : dias);
+      console.log(op.json ? JSON.stringify({ apagadas }) : `Apaguei ${apagadas.length} execução(ões) com mais de ${dias} dia(s).`);
       return 0;
     }
     case 'segredos': {
@@ -419,6 +430,17 @@ cards:
     etapas: [C-01, C-02]
     branch: feat/aceite
 `;
+
+// Parar (botão da extensão) ou Ctrl+C: desliga apps, navegadores e cópias antes de sair.
+let parando = false;
+for (const sinal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sinal, () => {
+    if (parando) return;
+    parando = true;
+    console.error('\nParando: desligando apps e navegadores e removendo as cópias das branches...');
+    pararTudo().finally(() => process.exit(130));
+  });
+}
 
 main().then(
   (c) => process.exit(c),

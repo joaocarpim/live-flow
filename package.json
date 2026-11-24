@@ -1,10 +1,10 @@
 {
   "name": "liveflow",
   "version": "0.1.0",
-  "description": "Testa o fluxo de tela de cada card ou branch, de forma determinística, antes de entregar.",
+  "description": "Testa o fluxo de tela de cada card, em blocos, antes de entregar. Determinístico: a IA escreve, o liveflow executa.",
   "type": "module",
-  "license": "UNLICENSED",
-  "private": true,
+  "license": "MIT",
+  "private": false,
   "bin": {
     "liveflow": "bin/liveflow.js"
   },
@@ -15,7 +15,8 @@
     "test": "node --test --test-reporter=spec \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
-    "liveflow": "node src/cli.ts"
+    "liveflow": "node src/cli.ts",
+    "prepare": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "yaml": "^2.9.1"
@@ -25,6 +26,34 @@
     "@types/vscode": "1.90",
     "@vscode/vsce": "^4.1.1",
     "esbuild": "^0.25.12",
+    "playwright": "1.57",
     "typescript": "^5.9.3"
-  }
+  },
+  "author": "João Carpim",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joaocarpim/live-flow.git"
+  },
+  "homepage": "https://github.com/joaocarpim/live-flow#readme",
+  "bugs": {
+    "url": "https://github.com/joaocarpim/live-flow/issues"
+  },
+  "keywords": [
+    "testes",
+    "e2e",
+    "playwright",
+    "fluxo",
+    "cards",
+    "qa",
+    "vscode",
+    "claude",
+    "branch",
+    "regressao"
+  ],
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
 }

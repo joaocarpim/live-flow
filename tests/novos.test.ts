@@ -219,3 +219,16 @@ test('gravação: junta digitação no mesmo campo e salva no card mantendo come
   assert.match(texto, /# do técnico/);
   assert.equal(lerArtefato(texto).cards[0]!.estado, 'pronto');
 });
+
+test('limpeza: apaga só execuções mais antigas que o prazo', async () => {
+  const { limparExecucoes } = await import('../src/relatorios.ts');
+  const { utimesSync } = await import('node:fs');
+  const raiz = mkdtempSync(join(tmpdir(), 'lf-limpa-'));
+  for (const d of ['velha', 'nova']) mkdirSync(join(raiz, '.liveflow/execucoes', d), { recursive: true });
+  const antigo = new Date(Date.now() - 20 * 24 * 3600 * 1000);
+  utimesSync(join(raiz, '.liveflow/execucoes/velha'), antigo, antigo);
+  assert.deepEqual(limparExecucoes(raiz, 14), ['velha']);
+  assert.ok(existsSync(join(raiz, '.liveflow/execucoes/nova')));
+  assert.deepEqual(limparExecucoes(raiz, 0), [], '0 = guardar para sempre');
+  assert.equal(lerArtefato('sistema:\n  guardar_dias: 7\ncards: []\n').sistema.guardarDias, 7);
+});

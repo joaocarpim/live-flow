@@ -84,6 +84,7 @@ function sistemaPadrao(s: Record<string, unknown>, problemas: string[] = []): Si
     paralelo,
     servicos: [],
     reaproveitarDependencias: s.reaproveitar_dependencias !== false && s.reaproveitar_dependencias !== 'nao',
+    guardarDias: typeof s.guardar_dias === 'number' && s.guardar_dias >= 0 ? Math.floor(s.guardar_dias) : 14,
   };
   if (typeof s.preparar === 'string') sistema.preparar = s.preparar;
   if (typeof s.iniciar === 'string') sistema.iniciar = s.iniciar;

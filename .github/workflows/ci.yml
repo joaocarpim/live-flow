@@ -1,0 +1,30 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run typecheck
+      - name: Testes (inclui os de ponta a ponta com navegador)
+        run: npm test
+      - name: Extensão do VS Code (.vsix)
+        working-directory: extensao
+        run: |
+          node build.mjs
+          npx --prefix .. vsce package --no-dependencies --skip-license -o liveflow-${{ github.sha }}.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: liveflow-vsix
+          path: extensao/*.vsix

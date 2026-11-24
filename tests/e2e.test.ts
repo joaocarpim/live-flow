@@ -10,7 +10,8 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { commit, escrever, g } from './ajuda.ts';
 
-const pw = process.env.LIVEFLOW_PW_NODE_MODULES;
+// Playwright: o do próprio repositório (devDependency) ou outro, por LIVEFLOW_PW_NODE_MODULES.
+const pw = process.env.LIVEFLOW_PW_NODE_MODULES ?? (existsSync(new URL('../node_modules/playwright', import.meta.url)) ? fileURLToPath(new URL('../node_modules', import.meta.url)) : undefined);
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
 const app = (botao: string) => `import { createServer } from 'node:http';

@@ -1,7 +1,7 @@
 # liveflow
 
 Testa o fluxo de tela de cada card, em blocos, de forma determinística, antes de entregar.
-CLI em Node 22 (TypeScript rodando direto, sem build no desenvolvimento) + extensão do VS Code (próxima fase).
+CLI em Node 22 (TypeScript rodando direto, sem build no desenvolvimento) + extensão do VS Code (`extensao/`) + plugin do Claude Code (`plugin/`) + GitHub Action (`action.yml`). Documentação de uso em `docs/`; demo em `exemplo/`.
 Logo: commits formando um check (`assets/logo-liveflow.svg`). Independente do safemerge.
 
 ## Princípios (não negociáveis)
@@ -17,6 +17,8 @@ Logo: commits formando um check (`assets/logo-liveflow.svg`). Independente do sa
 9. **Com mais de um card, nunca ao vivo.** Ao vivo é só para um card.
 10. **O sistema em teste é o único destino.** Link vindo de e-mail ou variável só abre se for do próprio sistema; upload só de arquivo dentro do projeto.
 11. **Código usado fica registrado.** Cada serviço anota branch e sha; se outro repositório não tem a branch, usa a base e escreve isso no resultado.
+12. **Ambiente não é card.** Navegador ausente, dependência do sistema ou ffmpeg faltando viram "não rodou" (ou aviso, no caso do vídeo), nunca falha confirmada.
+13. **Parar limpa tudo.** SIGINT/SIGTERM desligam apps (árvore de processos) e navegadores e removem as cópias (`pararTudo`).
 
 ## Decisão: só cards, em blocos (24/11/2026)
 
@@ -75,25 +77,23 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 | `src/relatorios.ts` | JUnit, histórico, quarentena de instáveis |
 | `src/integracoes.ts` | hook pre-push, workflow do GitHub, segredos usados |
 | `src/descricao.ts` | passo em linguagem simples |
-| `src/cli.ts` | comandos |
+| `src/ambiente.ts` | diagnóstico (`liveflow ambiente`) |
+| `src/cli.ts` | comandos; trata SIGINT/SIGTERM |
+| `bin/liveflow.js` | usa `src/` num repositório clonado e `dist/` quando instalado como pacote |
+| `extensao/` | extensão do VS Code: `src/extensao.ts` (fala com a CLI empacotada em `dist/cli`), `media/app.js` (telas), `teste/prints.mjs` (prints com dados reais) |
+| `plugin/` | plugin do Claude Code: skill `liveflow` (+ `referencia.md`); catálogo em `.claude-plugin/marketplace.json` |
+| `action.yml` | GitHub Action composta |
+| `exemplo/` | Marmoraria Pedra Fina + `criar-demo.sh` |
 
 ## Comandos de desenvolvimento
 
-- `npm test`: 64 testes (git real com branch local e remota, dois repositórios, app subindo por branch, Mailpit falso).
+- `npm test`: 67 testes (git real com branch local e remota, dois repositórios, app subindo por branch, Mailpit falso).
 - `LIVEFLOW_PW_NODE_MODULES=/caminho/node_modules npm test`: inclui os 3 testes com navegador de verdade (duas pessoas, foto, celular, e-mail, sessão reaproveitada, sugestão de texto, gravador).
-- `npm run typecheck`, `npm run build` (gera `dist/` para publicar).
+- `npm run typecheck`, `npm run build` (gera `dist/`; roda sozinho no `prepare` ao instalar pelo GitHub).
+- Extensão: `cd extensao && node build.mjs` e `npx --prefix .. vsce package --no-dependencies --skip-license`.
+- Prints da documentação: `node extensao/teste/prints.mjs <repo-demo> <saida>` (precisa de execuções reais na demo).
+- Plugin: `claude plugin validate .` e `claude plugin validate ./plugin`.
 
 ## Próximas fases
 
-| Versão | Entrega |
-|---|---|
-| 0.1 (feita) | artefato, passo a passo determinístico (inclui guardar, upload, várias pessoas, e-mail, celular, conferência manual), jornadas, blocos, vários serviços e repositórios, dependências reaproveitadas, seed por tentativa, repetição, vizinhos, sugestões de texto, gravador, trava de alvo, eventos, prompts, histórico/quarentena, JUnit, pre-push, workflow do GitHub, CLI |
-| 0.2 | extensão VS Code: lista de cards, prévia dos blocos, criar cards das branches locais/remotas, ao vivo com navegador visível, resultados, botões "Resolver com Claude" (copiar + abrir Claude Code), segredos no SecretStorage |
-| 0.3 | Código: estática diff-aware (Semgrep, gitleaks), dependências (OSV), unitária dos arquivos do card, cobertura só das linhas do diff |
-| 0.4 | API e dados: permissões por perfil (a partir de `perfis`), contrato OpenAPI, webhooks repetidos e fora de ordem |
-| 0.5 | Segurança, só em permitidos: ataques comuns, sessão e cabeçalhos, upload, fuzzing, LGPD |
-| 0.6 | Interface: navegadores e celular, offline e rede ruim, acessibilidade (axe-core), Web Vitals |
-| 0.7 | Robustez: resiliência por interceptação, carga (k6), teste longo; modo noturno |
-| 0.8 | mapa critérios × testes, baseline da base guardada por sha, SARIF |
-
-Cada fase muda `implementada: true` da camada em `plano.ts` só quando a execução existir e tiver teste.
+Veja `docs/roadmap.md`. Cada fase muda `implementada: true` da camada em `plano.ts` só quando a execução existir e tiver teste.

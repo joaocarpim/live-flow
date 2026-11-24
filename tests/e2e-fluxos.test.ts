@@ -14,7 +14,8 @@ import { gravar, salvarPassos } from '../src/gravar.ts';
 import { lerArtefato } from '../src/artefato.ts';
 import { portaLivre, esperarSaude } from '../src/executar.ts';
 
-const pw = process.env.LIVEFLOW_PW_NODE_MODULES;
+// Playwright: o do próprio repositório (devDependency) ou outro, por LIVEFLOW_PW_NODE_MODULES.
+const pw = process.env.LIVEFLOW_PW_NODE_MODULES ?? (existsSync(new URL('../node_modules/playwright', import.meta.url)) ? fileURLToPath(new URL('../node_modules', import.meta.url)) : undefined);
 const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 
 // App da marmoraria em miniatura: técnico cria orçamento e envia foto; cliente aceita pelo link.

@@ -1,0 +1,12 @@
+{
+  "name": "liveflow",
+  "description": "liveflow: testes de fluxo de tela por card, determinísticos",
+  "owner": { "name": "João Carpim" },
+  "plugins": [
+    {
+      "name": "liveflow",
+      "source": "./plugin",
+      "description": "Escreve cards e passo a passo para o liveflow, roda os testes e corrige falhas confirmadas"
+    }
+  ]
+}

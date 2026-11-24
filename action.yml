@@ -1,0 +1,45 @@
+name: liveflow
+description: Testa o fluxo de tela dos cards do .liveflow/cards.yaml, de forma determinística, e gera relatório JUnit.
+author: João Carpim
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  cards:
+    description: Ids dos cards separados por espaço. Vazio = cards da branch do PR (--da-branch).
+    default: ''
+  regressao:
+    description: '"true" roda os cards entregues no código da base (bom para agendamento noturno).'
+    default: 'false'
+  modo:
+    description: rapido, completo ou noturno.
+    default: rapido
+  junit:
+    description: Caminho do relatório JUnit.
+    default: liveflow-junit.xml
+
+outputs:
+  junit:
+    description: Caminho do relatório JUnit gerado.
+    value: ${{ inputs.junit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Instalar o liveflow
+      shell: bash
+      run: npm ci --omit=dev --no-audit --no-fund --prefix "$GITHUB_ACTION_PATH"
+    - name: Rodar os cards
+      shell: bash
+      env:
+        LF_CARDS: ${{ inputs.cards }}
+        LF_REGRESSAO: ${{ inputs.regressao }}
+        LF_MODO: ${{ inputs.modo }}
+        LF_JUNIT: ${{ inputs.junit }}
+        LF_BRANCH: ${{ github.head_ref || github.ref_name }}
+      run: |
+        if [ "$LF_REGRESSAO" = "true" ]; then SELECAO="--regressao"
+        elif [ -n "$LF_CARDS" ]; then SELECAO="$LF_CARDS"
+        else SELECAO="--da-branch --branch-atual $LF_BRANCH"; fi
+        node "$GITHUB_ACTION_PATH/bin/liveflow.js" rodar $SELECAO --modo "$LF_MODO" --junit "$LF_JUNIT"

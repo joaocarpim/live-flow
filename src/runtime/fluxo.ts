@@ -193,11 +193,29 @@ async function principal(): Promise<void> {
   const t = (s: string) => preencherTexto(s, vars);
   const sessoes = new Map<string, Sessao>();
 
+  let comVideo = true;
   const novaSessao = async (nome: string, estado?: string): Promise<Sessao> => {
-    const context = await browser.newContext({ ...tela, baseURL: entrada.baseUrl, recordVideo: { dir: join(entrada.pastaSaida, 'video', nome || 'visitante') }, ...(estado ? { storageState: estado } : {}) });
+    const base = { ...tela, baseURL: entrada.baseUrl, ...(estado ? { storageState: estado } : {}) };
+    let context: any;
+    let page: any;
+    if (comVideo) {
+      try {
+        context = await browser.newContext({ ...base, recordVideo: { dir: join(entrada.pastaSaida, 'video', nome || 'visitante') } });
+        page = await context.newPage();
+      } catch (e) {
+        // sem o ffmpeg do Playwright não há vídeo; o teste segue sem ele
+        await context?.close().catch(() => undefined);
+        context = undefined;
+        comVideo = false;
+        emitir({ tipo: 'aviso', regra: 'video', mensagem: `Vídeo desligado: ${String((e as Error).message).split('\n')[0]}. Para gravar vídeo: npx playwright install ffmpeg` });
+      }
+    }
+    if (!context) {
+      context = await browser.newContext(base);
+      page = await context.newPage();
+    }
     const trace = join(entrada.pastaSaida, sessoes.size === 0 ? 'trace.zip' : `trace-${nome || 'visitante'}.zip`);
     await context.tracing.start({ screenshots: true, snapshots: true });
-    const page = await context.newPage();
     page.setDefaultTimeout(entrada.timeoutPassoMs);
     page.on('response', (r: any) => {
       if (r.status() >= 500) emitir({ tipo: 'aviso', regra: 'erro_500', mensagem: `${r.request().method()} ${new URL(r.url()).pathname} respondeu ${r.status()}` });
@@ -341,7 +359,14 @@ async function principal(): Promise<void> {
         await s.page.screenshot({ path: quadro, type: 'jpeg', quality: 60 }).then(() => emitir({ tipo: 'quadro', n: p.n, arquivo: quadro, url: s!.page.url(), como: p.como }), () => undefined);
       }
     } catch (e) {
-      const erro = e instanceof ErroPasso ? e : new ErroPasso('tempo', String((e as Error).message).split('\n')[0] ?? 'erro');
+      // Problema do ambiente (navegador, dependência do sistema) não é falha do card.
+      const texto = String((e as Error).message);
+      if (!(e instanceof ErroPasso) && /Executable doesn't exist|Host system is missing dependencies|browserType\.launch|Target page, context or browser has been closed/.test(texto)) {
+        emitir({ tipo: 'ambiente', erro: `Problema no ambiente do navegador, não no card: ${texto.split('\n')[0]}. Rode: npx playwright install --with-deps chromium` });
+        await browser.close().catch(() => undefined);
+        process.exit(2);
+      }
+      const erro = e instanceof ErroPasso ? e : new ErroPasso('tempo', texto.split('\n')[0] ?? 'erro');
       const pagina = s?.page ?? sessoes.get(p.como ?? '')?.page;
       if (erro.tipo === 'nao_encontrado' && pagina && ('alvo' in p || 'campo' in p)) {
         const alvo = 'alvo' in p ? p.alvo : 'campo' in p ? p.campo : '';
