@@ -34,6 +34,10 @@ Node 22.18+ roda o TypeScript direto: não há build no desenvolvimento. `npm ru
 | `exemplo/` | demo da Marmoraria Pedra Fina |
 | `docs/` | documentação |
 
+## Versões
+
+Mude `version` no `package.json` (e em `extensao/package.json` e `plugin/.claude-plugin/plugin.json`) e escreva a seção no `CHANGELOG.md`. Ao chegar na `main`, o workflow `release` cria a tag e a release com o `.vsix`.
+
 ## Pull requests
 
 - Um assunto por PR, com a descrição do problema e de como testar.

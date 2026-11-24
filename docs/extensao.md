@@ -4,7 +4,7 @@ A extensão é a interface; quem testa é a mesma CLI, empacotada dentro dela. E
 
 ## Instalar
 
-1. Baixe o `liveflow-*.vsix` do último [build do CI](https://github.com/joaocarpim/live-flow/actions/workflows/ci.yml), ou gere:
+1. Baixe o `liveflow-*.vsix` da [última release](https://github.com/joaocarpim/live-flow/releases/latest), ou gere:
    ```bash
    cd extensao && node build.mjs && npx --prefix .. vsce package --no-dependencies --skip-license
    ```

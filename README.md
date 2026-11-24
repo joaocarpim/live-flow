@@ -7,6 +7,7 @@
 **Testa o fluxo de tela de cada card antes de entregar. A IA escreve; o liveflow executa.**
 
 [![CI](https://github.com/joaocarpim/live-flow/actions/workflows/ci.yml/badge.svg)](https://github.com/joaocarpim/live-flow/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/joaocarpim/live-flow?color=17945F)](https://github.com/joaocarpim/live-flow/releases/latest)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-17945F.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2022.18-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org)
 [![VS Code](https://img.shields.io/badge/VS%20Code-extens%C3%A3o-007ACC.svg?logo=visualstudiocode&logoColor=white)](docs/extensao.md)
@@ -145,7 +146,7 @@ Lista de cards, prévia dos blocos, execução ao vivo com a tela do app dentro 
 </tr>
 </table>
 
-Instalação: baixe o `.vsix` gerado pelo [CI](https://github.com/joaocarpim/live-flow/actions/workflows/ci.yml) (ou gere com `cd extensao && node build.mjs && npx vsce package`) e use **Extensões → … → Instalar a partir de VSIX**. Mais em [docs/extensao.md](docs/extensao.md).
+Instalação: baixe o [`liveflow-0.1.0.vsix`](https://github.com/joaocarpim/live-flow/releases/latest) da última release e use **Extensões → … → Instalar a partir de VSIX**. Mais em [docs/extensao.md](docs/extensao.md).
 
 ## Com o Claude Code
 
