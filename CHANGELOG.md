@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 (2026-11-24)
+
+- Ícone da extensão corrigido: o PNG tinha sido gerado cortado (só o canto do fundo). Agora é a logo inteira em 256 px.
+
 ## 0.1.2 (2026-11-24)
 
 - Extensão no Marketplace com o identificador `liveflow-cards` e o nome "liveflow cards: testes de fluxo" (o nome `liveflow` já existia lá). Comandos, configurações e a CLI continuam `liveflow`.
