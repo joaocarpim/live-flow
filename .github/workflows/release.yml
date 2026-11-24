@@ -1,0 +1,36 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Extensão do VS Code (.vsix)
+        working-directory: extensao
+        run: |
+          node build.mjs
+          npx --prefix .. vsce package --no-dependencies --skip-license -o "liveflow-${GITHUB_REF_NAME#v}.vsix"
+      - name: Notas da versão (do CHANGELOG)
+        run: |
+          VERSAO="${GITHUB_REF_NAME#v}"
+          awk -v v="## $VERSAO" '$0 ~ "^"v {ok=1; next} /^## / && ok {exit} ok' CHANGELOG.md > notas.md
+          cat >> notas.md <<'TXT'
+
+          ### Instalar
+          - **CLI no seu projeto:** `npm i -D github:joaocarpim/live-flow playwright`
+          - **Extensão do VS Code:** baixe o `.vsix` abaixo → Extensões → … → Instalar a partir de VSIX
+          - **Plugin do Claude Code:** `/plugin install liveflow --marketplace joaocarpim/live-flow`
+          TXT
+      - name: Publicar a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" extensao/*.vsix --title "liveflow $GITHUB_REF_NAME" --notes-file notas.md --verify-tag
