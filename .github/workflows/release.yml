@@ -30,7 +30,7 @@ jobs:
         working-directory: extensao
         run: |
           node build.mjs
-          npx --prefix .. vsce package --no-dependencies --skip-license -o "liveflow-${{ steps.versao.outputs.versao }}.vsix"
+          npx --prefix .. vsce package --no-dependencies -o "liveflow-${{ steps.versao.outputs.versao }}.vsix"
       - name: Notas da versão (do CHANGELOG)
         if: steps.versao.outputs.nova == 'sim'
         run: |

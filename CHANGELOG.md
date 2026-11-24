@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 (2026-11-24)
+
+- Extensão do VS Code pronta para o Marketplace: publisher `JooVitorAparecidoCarpimdeSouza`, página da extensão com prints, licença no pacote.
+- CI e workflow gerado em `ubuntu-24.04` (o Playwright ainda não instala o navegador no 26.04); Playwright 1.65.1; actions v5.
+- Release automática quando a versão do `package.json` muda.
+
 ## 0.1.0 (2026-11-24)
 
 Primeira versão.

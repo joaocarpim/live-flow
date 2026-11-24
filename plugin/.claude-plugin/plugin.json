@@ -1,10 +1,18 @@
 {
   "name": "liveflow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Escreve cards e passo a passo para o liveflow, roda os testes e corrige falhas confirmadas. A IA escreve; o liveflow executa sem IA.",
-  "author": { "name": "João Carpim" },
+  "author": {
+    "name": "João Carpim"
+  },
   "homepage": "https://github.com/joaocarpim/live-flow",
   "repository": "https://github.com/joaocarpim/live-flow",
   "license": "MIT",
-  "keywords": ["testes", "e2e", "playwright", "cards", "qa"]
+  "keywords": [
+    "testes",
+    "e2e",
+    "playwright",
+    "cards",
+    "qa"
+  ]
 }

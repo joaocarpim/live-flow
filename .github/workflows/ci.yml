@@ -23,7 +23,7 @@ jobs:
         working-directory: extensao
         run: |
           node build.mjs
-          npx --prefix .. vsce package --no-dependencies --skip-license -o liveflow-${{ github.sha }}.vsix
+          npx --prefix .. vsce package --no-dependencies -o liveflow-${{ github.sha }}.vsix
       - uses: actions/upload-artifact@v4
         with:
           name: liveflow-vsix

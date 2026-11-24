@@ -2,37 +2,91 @@
   "name": "liveflow",
   "displayName": "liveflow",
   "description": "Testa o fluxo de tela de cada card, em blocos, antes de entregar. Sem IA na execução.",
-  "version": "0.1.0",
-  "publisher": "joaocarpim",
-  "license": "UNLICENSED",
-  "repository": { "type": "git", "url": "https://github.com/joaocarpim/liveflow" },
+  "version": "0.1.1",
+  "publisher": "JooVitorAparecidoCarpimdeSouza",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joaocarpim/live-flow"
+  },
   "icon": "media/icone.png",
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Testing"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Testing"
+  ],
   "main": "./dist/extensao.js",
-  "activationEvents": ["workspaceContains:.liveflow/cards.yaml", "onView:liveflow.cards"],
+  "activationEvents": [
+    "workspaceContains:.liveflow/cards.yaml",
+    "onView:liveflow.cards"
+  ],
   "contributes": {
     "viewsContainers": {
-      "activitybar": [{ "id": "liveflow", "title": "liveflow", "icon": "media/activitybar.svg" }]
+      "activitybar": [
+        {
+          "id": "liveflow",
+          "title": "liveflow",
+          "icon": "media/activitybar.svg"
+        }
+      ]
     },
     "views": {
-      "liveflow": [{ "type": "webview", "id": "liveflow.cards", "name": "Cards" }]
+      "liveflow": [
+        {
+          "type": "webview",
+          "id": "liveflow.cards",
+          "name": "Cards"
+        }
+      ]
     },
     "commands": [
-      { "command": "liveflow.abrir", "title": "liveflow: Abrir painel" },
-      { "command": "liveflow.atualizar", "title": "liveflow: Recarregar cards" },
-      { "command": "liveflow.iniciar", "title": "liveflow: Criar artefato de cards" },
-      { "command": "liveflow.definirSegredo", "title": "liveflow: Definir segredo" }
+      {
+        "command": "liveflow.abrir",
+        "title": "liveflow: Abrir painel"
+      },
+      {
+        "command": "liveflow.atualizar",
+        "title": "liveflow: Recarregar cards"
+      },
+      {
+        "command": "liveflow.iniciar",
+        "title": "liveflow: Criar artefato de cards"
+      },
+      {
+        "command": "liveflow.definirSegredo",
+        "title": "liveflow: Definir segredo"
+      }
     ],
     "configuration": {
       "title": "liveflow",
       "properties": {
-        "liveflow.node": { "type": "string", "default": "node", "description": "Executável do Node 22.18+ usado para rodar o liveflow." }
+        "liveflow.node": {
+          "type": "string",
+          "default": "node",
+          "description": "Executável do Node 22.18+ usado para rodar o liveflow."
+        }
       }
     }
   },
   "scripts": {
     "build": "node build.mjs",
-    "pacote": "node build.mjs && vsce package --no-dependencies --allow-missing-repository -o liveflow-0.1.0.vsix"
-  }
+    "pacote": "node build.mjs && vsce package --no-dependencies -o liveflow.vsix"
+  },
+  "homepage": "https://github.com/joaocarpim/live-flow#readme",
+  "bugs": {
+    "url": "https://github.com/joaocarpim/live-flow/issues"
+  },
+  "galleryBanner": {
+    "color": "#15171C",
+    "theme": "dark"
+  },
+  "keywords": [
+    "testes",
+    "e2e",
+    "playwright",
+    "qa",
+    "cards",
+    "claude"
+  ]
 }

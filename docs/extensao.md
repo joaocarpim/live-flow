@@ -6,7 +6,7 @@ A extensão é a interface; quem testa é a mesma CLI, empacotada dentro dela. E
 
 1. Baixe o `liveflow-*.vsix` da [última release](https://github.com/joaocarpim/live-flow/releases/latest), ou gere:
    ```bash
-   cd extensao && node build.mjs && npx --prefix .. vsce package --no-dependencies --skip-license
+   cd extensao && node build.mjs && npx --prefix .. vsce package --no-dependencies
    ```
 2. No VS Code: **Extensões → … → Instalar a partir de VSIX**.
 3. Abra um projeto com `.liveflow/cards.yaml`. O ícone do liveflow aparece na barra de atividades.
