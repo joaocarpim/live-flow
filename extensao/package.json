@@ -2,7 +2,7 @@
   "name": "liveflow-cards",
   "displayName": "liveflow cards: testes de fluxo",
   "description": "Testa o fluxo de tela de cada card, em blocos, antes de entregar. Sem IA na execução.",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publisher": "JooVitorAparecidoCarpimdeSouza",
   "license": "MIT",
   "repository": {

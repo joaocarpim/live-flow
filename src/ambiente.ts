@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import { verificarAlvo } from './seguranca.ts';
 import type { Artefato } from './tipos.ts';
 import { CAMINHO_ARTEFATO } from './artefato.ts';
+import { ehRepositorio } from './git.ts';
 
 const exec = promisify(execFile);
 
@@ -24,6 +25,8 @@ export async function diagnosticar(repo: string, art: Artefato): Promise<{ itens
   const itens: ItemAmbiente[] = [];
   const temArtefato = existsSync(join(repo, CAMINHO_ARTEFATO));
   itens.push({ nome: 'Artefato de cards', ok: temArtefato && !art.problemas.length, detalhe: temArtefato ? (art.problemas[0] ?? CAMINHO_ARTEFATO) : 'não existe', ...(temArtefato ? {} : { resolver: 'liveflow iniciar' }) });
+  const temGit = await ehRepositorio(repo);
+  itens.push({ nome: 'Repositório git', ok: temGit, detalhe: temGit ? 'ok' : 'a pasta não é um repositório git com commits: sem ele nenhum card roda', ...(temGit ? {} : { resolver: 'git init && git add -A && git commit -m "inicial"' }) });
   let pw = '';
   try {
     pw = createRequire(join(repo, 'package.json')).resolve('playwright');

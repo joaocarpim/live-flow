@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 (2026-11-24)
+
+- Pasta sem git: em vez do erro cru do git ("not a git repository"), cada card fica "não rodou" com o motivo e o comando que resolve. A aba Ambiente ganhou o item "Repositório git".
+- Gravar numa pasta sem git: o app sobe direto na pasta, com o código como está, e o liveflow avisa que não é a branch do card.
+- O artefato de exemplo (`liveflow iniciar`) agora diz no topo que os cards e as branches dele são de mentira e precisam ser trocados.
+
 ## 0.1.5 (2026-11-24)
 
 - Ao vivo com vários cards: rodam um por vez, e a tela mostra o card que está rodando, com a fila em cima (dá para clicar e rever um card que já terminou).

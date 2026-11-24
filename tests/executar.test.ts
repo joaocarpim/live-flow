@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { lerArtefato } from '../src/artefato.ts';
@@ -207,4 +207,28 @@ test('ao vivo: o card escolhido roda ao vivo e a dependência incluída roda esc
   const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-11'], async (e) => (vistos.push([e.card, e.aoVivo]), 0), { aoVivo: true, aoVivoCards: ['C-11'] });
   await executar(o);
   assert.deepEqual(vistos, [['C-01', false], ['C-11', true]]);
+});
+
+test('pasta sem git: nenhum card roda, e o motivo diz o que fazer', async () => {
+  let chamou = false;
+  const { o } = preparar('  url: http://localhost:3999\n', ['C-01', 'C-09'], async () => ((chamou = true), 0));
+  o.repo = mkdtempSync(join(tmpdir(), 'lf-semgit-'));
+  const res = await executar(o);
+  assert.equal(chamou, false);
+  assert.deepEqual(res.map((r) => r.resultado), ['nao_rodou', 'nao_rodou']);
+  assert.match(res[0]!.motivo!, /não é um repositório git.*git init/);
+});
+
+test('gravar numa pasta sem git sobe o app na própria pasta e avisa', async () => {
+  const { subirParaUso } = await import('../src/executar.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'lf-semgit-grav-'));
+  writeFileSync(join(dir, 'app.mjs'), "import http from 'node:http'; http.createServer((q, s) => s.end('pasta')).listen(process.env.PORT);");
+  const art = lerArtefato('sistema:\n  url: http://127.0.0.1:{{porta}}\n  iniciar: node app.mjs\n  saude: /\ncards: []\n');
+  const amb = await subirParaUso(dir, art, 'feat/aceite', new Registro(join(dir, 'ev.ndjson')));
+  try {
+    assert.equal(await (await fetch(amb.url)).text(), 'pasta');
+    assert.match(amb.aviso!, /não é um repositório git/);
+  } finally {
+    await amb.parar();
+  }
 });

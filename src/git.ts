@@ -46,6 +46,13 @@ export async function atualizarRemotas(repo: string): Promise<void> {
   await git(repo, ['fetch', '--all', '--prune']);
 }
 
+/** A pasta está dentro de um repositório git (com pelo menos um commit)? */
+export async function ehRepositorio(repo: string): Promise<boolean> {
+  return git(repo, ['rev-parse', '--verify', 'HEAD']).then(() => true, () => false);
+}
+
+export const SEM_GIT = (repo: string) => `A pasta ${repo} não é um repositório git com commits. O liveflow precisa do git para saber qual código testou (e para montar a cópia da branch do card). Abra a pasta do repositório no VS Code, ou crie um: git init && git add -A && git commit -m "inicial".`;
+
 export async function branchAtual(repo: string): Promise<string | null> {
   const out = (await git(repo, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
   return out === 'HEAD' ? null : out;

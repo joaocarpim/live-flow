@@ -193,6 +193,7 @@ async function main(): Promise<number> {
       const ambiente = await subirParaUso(repo, art, c.card.branch ?? 'HEAD', new Registro(join(pasta, 'events.ndjson')));
       try {
         const g = await gravar({ projeto: repo, baseUrl: ambiente.url, caminho: op.caminho!, visivel: !op['sem-janela'] });
+        if (ambiente.aviso) console.log(`Aviso: ${ambiente.aviso}`);
         console.log(`Gravando ${c.card.id} em ${ambiente.url}${op.caminho}. Faça o fluxo no navegador e feche a janela para terminar.`);
         await g.fechado;
         const passos = await g.parar();
@@ -287,11 +288,13 @@ function iniciar(): number {
   }
   mkdirSync(join(repo, '.liveflow'), { recursive: true });
   writeFileSync(arq, EXEMPLO);
-  console.log(`Criado ${CAMINHO_ARTEFATO}. Ajuste "sistema" e escreva o passo a passo dos cards.`);
+  console.log(`Criado ${CAMINHO_ARTEFATO} de EXEMPLO. Os cards e branches dele são de mentira: troque pelos seus cards (liveflow prompt artefato) e ajuste "sistema".`);
   return 0;
 }
 
-const EXEMPLO = `versao: 1
+const EXEMPLO = `# EXEMPLO. Os cards abaixo (C-01, C-02, C-03, J-01) e as branches deles (feat/login, feat/aceite...) são de mentira:
+# troque pelos seus cards (aba "Criar artefato" da extensão ou: liveflow prompt artefato) e ajuste "sistema" ao seu projeto.
+versao: 1
 sistema:
   url: http://localhost:{{porta}}
   permitidos: [localhost, 127.0.0.1]

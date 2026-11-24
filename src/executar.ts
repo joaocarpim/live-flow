@@ -5,7 +5,7 @@ import { existsSync, readFileSync, symlinkSync, writeFileSync, mkdirSync } from 
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { arquivosMudados, branchAtual, criarCopia, git, shaDe } from './git.ts';
+import { arquivosMudados, branchAtual, criarCopia, ehRepositorio, git, SEM_GIT, shaDe } from './git.ts';
 import { globParaRegex } from './fontes.ts';
 import type { AlvoCard } from './fontes.ts';
 import type { Bloco } from './blocos.ts';
@@ -109,10 +109,24 @@ export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
   const aoVivo = !!vivo?.size;
   void total;
   o.registro.emitir('execucao_inicio', { blocos: o.blocos.map((b) => ({ branch: b.branch, ondas: b.ondas.map((on) => on.map((c) => c.card.id)) })), modo: o.modo, aoVivo, paralelo: aoVivo ? 1 : sistema.paralelo });
-  // cópias de execuções interrompidas (Ctrl+C, máquina desligada) somem do registro do git
-  await git(o.repo, ['worktree', 'prune']).catch(() => undefined);
   const resultados = new Map<string, ResultadoCard>();
-  for (const [i, bloco] of o.blocos.entries()) await executarBloco(o, bloco, i + 1, vivo, resultados);
+  // sem git não dá para saber qual código foi testado: nenhum card roda, e o motivo diz o que fazer
+  if (!(await ehRepositorio(o.repo))) {
+    for (const [i, bloco] of o.blocos.entries()) {
+      for (const c of bloco.ondas.flat()) {
+        const pasta = join(o.pasta, c.card.id);
+        mkdirSync(pasta, { recursive: true });
+        const r: ResultadoCard = { card: c.card.id, branch: bloco.branch, resultado: 'nao_rodou', tentativas: 0, bancoZerado: !!sistema.seed, avisos: [], pendencias: [], pasta, vizinhos: [] };
+        resultados.set(c.card.id, r);
+        o.registro.emitir('card_inicio', { card: c.card.id, branch: bloco.branch, bloco: i + 1 });
+        fim(o, r, SEM_GIT(o.repo));
+      }
+    }
+  } else {
+    // cópias de execuções interrompidas (Ctrl+C, máquina desligada) somem do registro do git
+    await git(o.repo, ['worktree', 'prune']).catch(() => undefined);
+    for (const [i, bloco] of o.blocos.entries()) await executarBloco(o, bloco, i + 1, vivo, resultados);
+  }
   const lista = [...resultados.values()];
   o.registro.emitir('execucao_fim', { resumo: lista.map((r) => ({ card: r.card, resultado: r.resultado })) });
   writeFileSync(join(o.pasta, 'resultado.json'), JSON.stringify(lista, null, 2));
@@ -328,7 +342,8 @@ export function trocarPortas(texto: string, eu: string | null, portas: Map<strin
     .replaceAll('{{porta}}', String(eu ? portas.get(eu) : [...portas.values()][0]));
 }
 
-async function subirServicos(o: OpcoesExecucao, sistema: Sistema, ref: string, rotulo: string): Promise<AppNoAr> {
+/** usarPasta: sobe direto na pasta da pessoa, sem cópia (só a gravação usa, quando não há git). */
+async function subirServicos(o: OpcoesExecucao, sistema: Sistema, ref: string, rotulo: string, usarPasta = false): Promise<AppNoAr> {
   const copias: { remover: () => Promise<void> }[] = [];
   const procs: ReturnType<typeof spawn>[] = [];
   let parado = false;
@@ -347,6 +362,11 @@ async function subirServicos(o: OpcoesExecucao, sistema: Sistema, ref: string, r
     const codigo: CodigoUsado[] = [];
     for (const sv of sistema.servicos) {
       const repoDir = sv.repo ? resolve(o.repo, sv.repo) : o.repo;
+      if (usarPasta) {
+        codigo.push({ servico: sv.nome, repo: sv.repo ?? '.', ref: 'pasta atual', sha: 'sem-git', observacao: 'sem git: usei o código da pasta como está' });
+        preparados.push({ sv, dir: repoDir });
+        continue;
+      }
       const alvo = sv.repo ? await refNoOutroRepo(repoDir, ref, sv.base ?? sistema.base) : { ref };
       const copia = await criarCopia(repoDir, alvo.ref);
       copias.push(copia);
@@ -467,10 +487,12 @@ async function testarVizinhos(o: OpcoesExecucao, alvo: AlvoCard, url: string, ap
 }
 
 /** Sobe o sistema de uma branch para uso fora de um teste (ex.: gravar o passo a passo). */
-export async function subirParaUso(repo: string, artefato: Artefato, ref: string, registro: Registro): Promise<{ url: string; parar: () => Promise<void> }> {
+export async function subirParaUso(repo: string, artefato: Artefato, ref: string, registro: Registro): Promise<{ url: string; parar: () => Promise<void>; aviso?: string }> {
   if (!artefato.sistema.servicos.length) return { url: artefato.sistema.url, parar: async () => undefined };
   const o = { repo, artefato, blocos: [], aoVivo: false, modo: 'rapido', registro, pasta: '' } as OpcoesExecucao;
-  const app = await subirServicos(o, artefato.sistema, ref, 'gravação');
+  // gravar não afirma resultado: sem git, sobe o app direto na pasta (e avisa)
+  const semGit = !(await ehRepositorio(repo));
+  const app = await subirServicos(o, artefato.sistema, ref, 'gravação', semGit);
   await zerarBanco(artefato.sistema, app.dir, 'gravacao', app.url);
-  return { url: app.url, parar: app.parar };
+  return { url: app.url, parar: app.parar, ...(semGit ? { aviso: 'Esta pasta não é um repositório git: o app subiu com o código da pasta como está, não com a branch do card.' } : {}) };
 }
