@@ -1,7 +1,9 @@
 name: release
+# A cada envio para a main: se a versão do package.json ainda não tem release, cria a tag e a release.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -13,15 +15,26 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Versão nova?
+        id: versao
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSAO=$(node -p "require('./package.json').version")
+          echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VERSAO" >/dev/null 2>&1; then echo "nova=nao" >> "$GITHUB_OUTPUT"; else echo "nova=sim" >> "$GITHUB_OUTPUT"; fi
       - run: npm ci
+        if: steps.versao.outputs.nova == 'sim'
       - name: Extensão do VS Code (.vsix)
+        if: steps.versao.outputs.nova == 'sim'
         working-directory: extensao
         run: |
           node build.mjs
-          npx --prefix .. vsce package --no-dependencies --skip-license -o "liveflow-${GITHUB_REF_NAME#v}.vsix"
+          npx --prefix .. vsce package --no-dependencies --skip-license -o "liveflow-${{ steps.versao.outputs.versao }}.vsix"
       - name: Notas da versão (do CHANGELOG)
+        if: steps.versao.outputs.nova == 'sim'
         run: |
-          VERSAO="${GITHUB_REF_NAME#v}"
+          VERSAO="${{ steps.versao.outputs.versao }}"
           awk -v v="## $VERSAO" '$0 ~ "^"v {ok=1; next} /^## / && ok {exit} ok' CHANGELOG.md > notas.md
           cat >> notas.md <<'TXT'
 
@@ -30,7 +43,9 @@ jobs:
           - **Extensão do VS Code:** baixe o `.vsix` abaixo → Extensões → … → Instalar a partir de VSIX
           - **Plugin do Claude Code:** `/plugin install liveflow --marketplace joaocarpim/live-flow`
           TXT
-      - name: Publicar a release
+      - name: Publicar a release (cria a tag)
+        if: steps.versao.outputs.nova == 'sim'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" extensao/*.vsix --title "liveflow $GITHUB_REF_NAME" --notes-file notas.md --verify-tag
+          TAG: v${{ steps.versao.outputs.versao }}
+        run: gh release create "$TAG" extensao/*.vsix --target "$GITHUB_SHA" --title "liveflow $TAG" --notes-file notas.md
