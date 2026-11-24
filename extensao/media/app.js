@@ -3,7 +3,7 @@
 (function () {
   const vscode = acquireVsCodeApi();
   const modo = document.body.dataset.modo;
-  const logo = document.body.dataset.logo;
+  const logo = (!document.body.classList.contains('vscode-light') && document.body.dataset.logoEscuro) || document.body.dataset.logo;
   const raiz = document.getElementById('app');
 
   const S = {

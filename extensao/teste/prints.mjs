@@ -44,7 +44,7 @@ const vars = claro
 for (const modo of ['principal', 'lateral']) {
   writeFileSync(join(saida, `${modo}.html`), `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><link rel="stylesheet" href="file://${ext}/media/app.css">
 <style>:root{${vars}--vscode-font-family:Inter,system-ui,sans-serif}</style></head>
-<body data-modo="${modo}" data-logo="file://${ext}/media/logo-liveflow.svg"><div id="app"></div>
+<body class="${claro ? 'vscode-light' : 'vscode-dark'}" data-modo="${modo}" data-logo="file://${ext}/media/logo-liveflow.svg" data-logo-escuro="file://${ext}/media/logo-liveflow-escuro.svg"><div id="app"></div>
 <script>
 const DADOS = ${JSON.stringify(dados)};
 function acquireVsCodeApi(){ return { postMessage(m){ setTimeout(()=>responder(m),0); } }; }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7 (2026-11-24)
+
+- A aba do painel usa a logo (hexágono com o check), não mais o ícone em contorno da barra lateral. No tema escuro, a logo ganha um contorno sutil para o hexágono não sumir; o mesmo vale para o cabeçalho do painel.
+
 ## 0.1.6 (2026-11-24)
 
 - Pasta sem git: em vez do erro cru do git ("not a git repository"), cada card fica "não rodou" com o motivo e o comando que resolve. A aba Ambiente ganhou o item "Repositório git".

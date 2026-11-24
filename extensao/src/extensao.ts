@@ -113,7 +113,7 @@ class Painel {
         retainContextWhenHidden: true,
         localResourceRoots: [vscode.Uri.joinPath(ext.extensionUri, 'media'), vscode.Uri.file(join(cli.repo, '.liveflow'))],
       });
-      painel.iconPath = vscode.Uri.joinPath(ext.extensionUri, 'media', 'activitybar.svg');
+      painel.iconPath = { light: vscode.Uri.joinPath(ext.extensionUri, 'media', 'logo-liveflow.svg'), dark: vscode.Uri.joinPath(ext.extensionUri, 'media', 'logo-liveflow-escuro.svg') };
       Painel.atual = new Painel(ext, cli, painel, atualizarLateral);
     } else Painel.atual.painel.reveal();
     if (depois) setTimeout(() => Painel.atual?.painel.webview.postMessage({ tipo: 'navegar', destino: depois }), 300);
@@ -288,7 +288,7 @@ function html(webview: vscode.Webview, ext: vscode.ExtensionContext, modo: 'prin
 <link rel="stylesheet" href="${media('app.css')}">
 <title>liveflow</title>
 </head>
-<body data-modo="${modo}" data-logo="${media('logo-liveflow.svg')}">
+<body data-modo="${modo}" data-logo="${media('logo-liveflow.svg')}" data-logo-escuro="${media('logo-liveflow-escuro.svg')}">
 <div id="app"></div>
 <script nonce="${nonce}" src="${media('app.js')}"></script>
 </body>
