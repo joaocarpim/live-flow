@@ -87,6 +87,10 @@ export function rascunhoDeCard(b: Pick<Branch, 'nome' | 'semRemoto'>, arquivos: 
   return {
     id: `B-${slug || 'branch'}`,
     titulo,
+    tipo: 'card',
+    altera: [],
+    depende_de: [],
+    exclusivo: false,
     branch: b.semRemoto,
     arquivos,
     criterios: [],

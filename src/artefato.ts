@@ -40,6 +40,7 @@ export function lerArtefato(texto: string): Artefato {
   if (!Array.isArray(raiz.cards)) problemas.push('Falta a lista "cards".');
   const ids = new Set<string>();
   const cards = listas.map((c, i) => avaliarCard(c, i, ids));
+  resolverReferencias(cards);
   return { versao: 1, sistema, variaveis, cards, problemas };
 }
 
@@ -76,7 +77,27 @@ function avaliarCard(bruto: unknown, i: number, ids: Set<string>): CardAvaliado 
   if (!titulo) problemas.push('Falta o título.');
   const criterios = Array.isArray(c.criterios) ? c.criterios.map(String) : [];
 
-  const card: Card = { id, titulo, criterios, como_testar: [], perfil: perfil(c.testes, problemas) };
+  const listaIds = (v: unknown, campo: string) => {
+    if (v === undefined) return [];
+    if (!Array.isArray(v) || v.some((x) => typeof x !== 'string')) {
+      problemas.push(`"${campo}" precisa ser uma lista de textos.`);
+      return [];
+    }
+    return v as string[];
+  };
+  const tipo = c.tipo === 'jornada' ? 'jornada' : 'card';
+  if (c.tipo !== undefined && c.tipo !== 'card' && c.tipo !== 'jornada') problemas.push(`tipo "${String(c.tipo)}" não existe (use card ou jornada).`);
+  const card: Card = {
+    id, titulo, tipo, criterios, como_testar: [], perfil: perfil(c.testes, problemas),
+    altera: listaIds(c.altera, 'altera'),
+    depende_de: listaIds(c.depende_de, 'depende_de'),
+    exclusivo: c.exclusivo === true || c.exclusivo === 'sim',
+  };
+  if (tipo === 'jornada') {
+    card.etapas = listaIds(c.etapas, 'etapas');
+    if (card.etapas.length < 2) problemas.push('Jornada precisa de pelo menos 2 etapas (ids de cards).');
+    if (c.como_testar !== undefined) problemas.push('Jornada não tem "como_testar" próprio: os passos vêm das etapas.');
+  }
   if (typeof c.descricao === 'string') card.descricao = c.descricao;
   if (typeof c.branch === 'string' && c.branch.trim()) {
     card.branch = c.branch.trim();
@@ -86,7 +107,9 @@ function avaliarCard(bruto: unknown, i: number, ids: Set<string>): CardAvaliado 
 
   const passosBrutos = c.como_testar;
   let semPassos = false;
-  if (passosBrutos === undefined || passosBrutos === null || (Array.isArray(passosBrutos) && passosBrutos.length === 0)) {
+  if (tipo === 'jornada') {
+    // os passos são montados depois, em resolverReferencias
+  } else if (passosBrutos === undefined || passosBrutos === null || (Array.isArray(passosBrutos) && passosBrutos.length === 0)) {
     semPassos = true;
   } else if (!Array.isArray(passosBrutos)) {
     problemas.push('"como_testar" precisa ser uma lista de passos.');
@@ -103,6 +126,66 @@ function avaliarCard(bruto: unknown, i: number, ids: Set<string>): CardAvaliado 
   const estado = problemas.length ? 'invalido' : semPassos ? 'sem_passos' : 'pronto';
   if (estado === 'sem_passos') problemas.push('Falta o passo a passo ("como_testar"). Sem ele o card não pode ser testado.');
   return { card, estado, problemas };
+}
+
+/** Depois de ler todos: valida depende_de, detecta ciclos e monta os passos das jornadas. */
+function resolverReferencias(cards: CardAvaliado[]): void {
+  const porId = new Map(cards.map((c) => [c.card.id, c]));
+  const invalidar = (c: CardAvaliado, msg: string) => {
+    c.problemas = c.problemas.filter((p) => !p.startsWith('Falta o passo a passo'));
+    c.problemas.push(msg);
+    c.estado = 'invalido';
+  };
+  for (const c of cards) {
+    for (const d of c.card.depende_de) {
+      if (d === c.card.id) invalidar(c, 'O card não pode depender de si mesmo.');
+      else if (!porId.has(d)) invalidar(c, `depende_de: ${d} não existe no artefato.`);
+    }
+  }
+  // ciclos em depende_de
+  const estado = new Map<string, 'visitando' | 'feito'>();
+  const visitar = (id: string, caminho: string[]): string[] | null => {
+    if (estado.get(id) === 'feito') return null;
+    if (estado.get(id) === 'visitando') return [...caminho.slice(caminho.indexOf(id)), id];
+    estado.set(id, 'visitando');
+    for (const d of porId.get(id)?.card.depende_de ?? []) {
+      const ciclo = visitar(d, [...caminho, id]);
+      if (ciclo) return ciclo;
+    }
+    estado.set(id, 'feito');
+    return null;
+  };
+  for (const c of cards) {
+    const ciclo = visitar(c.card.id, []);
+    if (ciclo) for (const id of new Set(ciclo)) {
+      const alvo = porId.get(id);
+      if (alvo && !alvo.problemas.some((p) => p.startsWith('Dependência circular'))) invalidar(alvo, `Dependência circular: ${ciclo.join(' → ')}.`);
+    }
+  }
+  // jornadas
+  for (const j of cards.filter((c) => c.card.tipo === 'jornada')) {
+    if (j.estado === 'invalido') continue;
+    const passos: PassoCard[] = [];
+    const branches = new Set<string>();
+    let erro = '';
+    for (const id of j.card.etapas ?? []) {
+      const e = porId.get(id);
+      if (!e) { erro = `etapa ${id} não existe no artefato.`; break; }
+      if (e.card.tipo === 'jornada') { erro = `etapa ${id} é outra jornada (jornada dentro de jornada não é suportada).`; break; }
+      if (e.estado !== 'pronto') { erro = `etapa ${id} não está pronta: ${e.problemas[0] ?? ''}`; break; }
+      if (e.card.branch) branches.add(e.card.branch);
+      for (const p of e.card.como_testar) {
+        const { criterio: _c, ...resto } = p;
+        passos.push({ ...resto, n: passos.length + 1, etapa: id } as PassoCard);
+      }
+    }
+    if (!erro && !j.card.branch && branches.size > 1) erro = `as etapas estão em branches diferentes (${[...branches].join(', ')}). Declare "branch" na jornada.`;
+    if (erro) { invalidar(j, `Jornada: ${erro}`); continue; }
+    j.card.como_testar = passos;
+    if (!j.card.branch && branches.size === 1) j.card.branch = [...branches][0]!;
+    j.problemas = [];
+    j.estado = 'pronto';
+  }
 }
 
 function perfil(bruto: unknown, problemas: string[]): PerfilCard {

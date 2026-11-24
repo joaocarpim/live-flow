@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { lerArtefato } from '../src/artefato.ts';
-import { alvosDoArtefato } from '../src/fontes.ts';
+import { montarBlocos } from '../src/blocos.ts';
 import { executar } from '../src/executar.ts';
 import type { OpcoesExecucao } from '../src/executar.ts';
 import { Registro } from '../src/eventos.ts';
@@ -26,12 +26,21 @@ function preparar(yamlSistema: string, ids: string[], executorFluxo: OpcoesExecu
   - id: C-09
     titulo: Sem branch
     como_testar: [ { abrir: / } ]
+  - id: C-10
+    titulo: Outro card da mesma branch
+    branch: feat/aprovacao
+    como_testar: [ { abrir: / } ]
+  - id: C-11
+    titulo: Depende da aprovação
+    branch: feat/aprovacao
+    depende_de: [C-01]
+    como_testar: [ { abrir: / } ]
 `);
   assert.deepEqual(art.problemas, []);
   const pasta = mkdtempSync(join(tmpdir(), 'lf-exec-'));
   const registro = new Registro(join(pasta, 'events.ndjson'));
-  const { alvos } = alvosDoArtefato(art.cards, ids);
-  return { o: { repo, artefato: art, alvos, aoVivo: false, modo: 'rapido' as const, registro, pasta, executorFluxo, ...extra }, pasta };
+  const { blocos } = montarBlocos(art.cards, ids, { dadosIsolados: art.sistema.paralelo > 1 });
+  return { o: { repo, artefato: art, blocos, aoVivo: false, modo: 'rapido' as const, registro, pasta, executorFluxo, ...extra }, pasta };
 }
 
 /** Executor falso que olha o que está no ar de verdade: prova qual código foi testado. */
@@ -112,4 +121,22 @@ test('com mais de um card, nunca roda ao vivo', async () => {
   const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-01', 'C-09'], async (e) => (vistos.push(e.aoVivo), 0), { aoVivo: true });
   await executar(o);
   assert.deepEqual(vistos, [false, false]);
+});
+
+test('cards da mesma branch dividem um app só (um bloco)', async () => {
+  const { o, pasta } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-01', 'C-10'], async (e) => ((await conteudoNoAr(e)).includes('aprovacao') ? 0 : 1));
+  const res = await executar(o);
+  assert.deepEqual(res.map((r) => [r.card, r.resultado]), [['C-01', 'passou'], ['C-10', 'passou']]);
+  const eventos = readFileSync(join(pasta, 'events.ndjson'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(eventos.filter((e) => e.tipo === 'app_no_ar').length, 1);
+  assert.equal(eventos.filter((e) => e.tipo === 'bloco_inicio').length, 1);
+});
+
+test('se a dependência falha, o card dependente não roda e diz por quê', async () => {
+  const chamados: string[] = [];
+  const { o } = preparar(SIS(join(mkdtempSync(join(tmpdir(), 'lf-seed-')), 's.log')), ['C-11'], async (e) => (chamados.push(e.card), e.card === 'C-01' ? 1 : 0));
+  const res = await executar(o);
+  assert.deepEqual(res.map((r) => [r.card, r.resultado]), [['C-01', 'falhou'], ['C-11', 'nao_rodou']]);
+  assert.match(res[1]!.motivo!, /depende de C-01, que falhou/);
+  assert.ok(!chamados.includes('C-11'));
 });

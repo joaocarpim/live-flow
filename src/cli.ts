@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { stringify } from 'yaml';
 import { carregarArtefato, CAMINHO_ARTEFATO } from './artefato.ts';
-import { alvosDasBranches, alvosDoArtefato } from './fontes.ts';
-import type { AlvoCard } from './fontes.ts';
+import { alvosDasBranches } from './fontes.ts';
+import { montarBlocos, descreverBlocos } from './blocos.ts';
 import { atualizarRemotas, arquivosMudados, branchAtual, listarBranches } from './git.ts';
 import { montarPlano } from './plano.ts';
 import type { Modo } from './plano.ts';
@@ -14,20 +14,23 @@ import { Registro } from './eventos.ts';
 import { executar } from './executar.ts';
 import type { ResultadoCard } from './executar.ts';
 
-const AJUDA = `liveflow 0.1: testa o fluxo de tela de cada card ou branch
+const AJUDA = `liveflow 0.1: testa o fluxo de tela de cada card, em blocos
 
+Testar
   liveflow cards                         lista os cards e quais podem ser testados
-  liveflow branches [--sem-remotas] [--atualizar]
-  liveflow mapear --branches a,b         mostra os cards de cada branch (e rascunhos)
-  liveflow plano <card> [--modo m]       o que cada camada vai fazer neste card
-  liveflow rodar <card...>               testa cards do artefato
-  liveflow rodar --branches a,b          testa os cards das branches escolhidas
+  liveflow blocos <card...> | --todos    mostra como os cards vão ser agrupados
+  liveflow rodar <card...> | --todos     testa os cards, bloco por bloco
         [--modo rapido|completo|noturno] [--ao-vivo] [--json]
-  liveflow rascunho --branches a,b       gera cards em rascunho (sem passos) a partir das branches
-  liveflow prompt passos <card>          texto para o Claude escrever o passo a passo
+  liveflow plano <card> [--modo m]       o que cada camada vai fazer neste card
+  liveflow prompt resolver <card>        texto para o Claude corrigir a última falha
+
+Criar cards
+  liveflow iniciar                       cria ${CAMINHO_ARTEFATO} de exemplo
+  liveflow branches [--sem-remotas] [--atualizar]
+  liveflow mapear --branches a,b         quais branches já têm card
+  liveflow rascunho --branches a,b       cards em rascunho (sem passos) a partir das branches
   liveflow prompt artefato --branches a,b
-  liveflow prompt resolver <card>        texto para o Claude corrigir a última falha do card
-  liveflow iniciar                       cria ${CAMINHO_ARTEFATO} de exemplo`;
+  liveflow prompt passos <card>          texto para o Claude escrever o passo a passo`;
 
 const { values: op, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +41,7 @@ const { values: op, positionals } = parseArgs({
     json: { type: 'boolean', default: false },
     atualizar: { type: 'boolean', default: false },
     'sem-remotas': { type: 'boolean', default: false },
+    todos: { type: 'boolean', default: false },
     repo: { type: 'string' },
     ajuda: { type: 'boolean', short: 'h', default: false },
   },
@@ -122,31 +126,25 @@ async function main(): Promise<number> {
       });
       return 0;
     }
+    case 'blocos':
     case 'rodar': {
       avisosArquivo();
-      let alvos: AlvoCard[] = [];
-      if (listaBranches().length) {
-        const porBranch = await alvosDasBranches(repo, art.sistema.base, listaBranches(), art.cards);
-        for (const b of porBranch) {
-          if (b.rascunho) console.error(`${b.branch}: sem card. Gere com "liveflow rascunho --branches ${b.branch}" e complete o passo a passo.`);
-          for (const v of b.cards) {
-            if (v.card.estado === 'pronto') alvos.push({ card: v.card, branch: b.branch });
-            else console.error(`${v.card.card.id}: não pode ser testado. ${v.card.problemas.join(' ')}`);
-          }
-        }
-      } else {
-        const { alvos: a, recusados } = alvosDoArtefato(art.cards, args);
-        recusados.forEach((r) => console.error(`${r.id}: não pode ser testado. ${r.motivo}`));
-        alvos = a;
+      const ids = op.todos ? art.cards.filter((c) => c.estado === 'pronto').map((c) => c.card.id) : args;
+      if (!ids.length) throw new Error('Informe os cards (ex.: liveflow rodar C-01 C-02) ou use --todos.');
+      const plano = montarBlocos(art.cards, ids, { dadosIsolados: art.sistema.paralelo > 1 });
+      if (cmd === 'blocos') {
+        saida(plano, () => descreverBlocos(plano));
+        return plano.blocos.length ? 0 : 1;
       }
-      if (!alvos.length) {
+      if (!op.json) console.log(descreverBlocos(plano) + '\n');
+      if (!plano.blocos.length) {
         console.error('Nada para testar.');
         return 1;
       }
       const pasta = join(repo, '.liveflow', 'execucoes', new Date().toISOString().replace(/[:.]/g, '-'));
       const registro = new Registro(join(pasta, 'events.ndjson'));
       if (!op.json) registro.ouvintes.push(mostrarAoVivo);
-      const res = await executar({ repo, artefato: art, alvos, aoVivo: op['ao-vivo']!, modo, registro, pasta });
+      const res = await executar({ repo, artefato: art, blocos: plano.blocos, aoVivo: op['ao-vivo']!, modo, registro, pasta });
       if (op.json) console.log(JSON.stringify(res, null, 2));
       else resumo(res, pasta);
       return res.some((r) => r.resultado === 'falhou' || r.vizinhos.some((v) => v.resultado === 'quebrou_nesta_branch')) ? 1 : 0;
@@ -260,10 +258,26 @@ cards:
       - clicar: Entrar
       - ver_texto: E-mail ou senha incorretos
         criterio: 2
+    altera: [usuarios]
     testes:
       interface: sim
       upload: nao
       vizinhos: auto
+  - id: C-02
+    titulo: Recuperar senha
+    branch: feat/login
+    depende_de: [C-01]     # só roda se o C-01 passar
+    altera: [usuarios]     # não roda ao mesmo tempo que outro card que altera usuarios
+    como_testar:
+      - abrir: /login
+      - clicar: Esqueci a senha
+      - preencher: { campo: E-mail, valor: "{{usuario}}" }
+      - clicar: Enviar
+      - ver_texto: Enviamos um link para o seu e-mail
+  - id: J-01
+    titulo: Entrar e recuperar a senha
+    tipo: jornada          # junta os passos das etapas num teste só
+    etapas: [C-01, C-02]
 `;
 
 main().then(

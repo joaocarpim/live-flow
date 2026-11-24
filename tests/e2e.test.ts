@@ -110,4 +110,9 @@ test('navegador de verdade: passa na branch certa, falha confirmada na quebrada,
   const [ambiguo] = await liveflow(repo, 'rodar', 'C-03');
   assert.equal(ambiguo.resultado, 'falhou');
   assert.equal(ambiguo.falha.motivo, 'ambiguo');
+
+  // C-01 e C-03 são da mesma branch: um bloco, um app só.
+  const juntos = await liveflow(repo, 'rodar', 'C-01', 'C-03');
+  assert.deepEqual(juntos.map((r: { card: string; resultado: string }) => [r.card, r.resultado]), [['C-01', 'passou'], ['C-03', 'falhou']]);
+  assert.equal(juntos[0].sha, juntos[1].sha);
 });

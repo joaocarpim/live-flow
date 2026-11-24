@@ -17,7 +17,7 @@ export type Passo =
   | { acao: 'esperar_ms'; ms: number };
 
 /** Passo já validado, com a linha de origem e o critério que ele prova (se houver). */
-export type PassoCard = Passo & { n: number; criterio?: number };
+export type PassoCard = Passo & { n: number; criterio?: number; /** Em jornadas: de qual card veio o passo. */ etapa?: string };
 
 export interface PerfilCard {
   interface?: boolean;
@@ -31,6 +31,16 @@ export interface PerfilCard {
 export interface Card {
   id: string;
   titulo: string;
+  /** "jornada" junta os passos de outros cards, em ordem, num teste só. */
+  tipo: 'card' | 'jornada';
+  /** Só em jornada: ids dos cards, na ordem. */
+  etapas?: string[];
+  /** O que o card muda (ex.: orcamentos, configuracoes). Cards que mudam a mesma coisa não rodam ao mesmo tempo. */
+  altera: string[];
+  /** Cards que precisam passar antes. Se um falhar, este não roda. Não carrega estado: cada card prepara o seu. */
+  depende_de: string[];
+  /** Roda sozinho, sem nada em paralelo (ex.: muda configuração global). */
+  exclusivo: boolean;
   descricao?: string;
   /** Branch onde o código do card está (local "feat/x" ou remota "origin/feat/x"). */
   branch?: string;

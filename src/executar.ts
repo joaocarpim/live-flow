@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { arquivosMudados, branchAtual, criarCopia } from './git.ts';
 import { globParaRegex } from './fontes.ts';
 import type { AlvoCard } from './fontes.ts';
+import type { Bloco } from './blocos.ts';
 import { comRepeticao } from './repeticao.ts';
 import { classificarRegressao } from './comparacao.ts';
 import { verificarAlvo } from './seguranca.ts';
@@ -52,7 +53,7 @@ export interface ResultadoCard {
 export interface OpcoesExecucao {
   repo: string;
   artefato: Artefato;
-  alvos: AlvoCard[];
+  blocos: Bloco[];
   aoVivo: boolean;
   modo: Modo;
   registro: Registro;
@@ -62,65 +63,101 @@ export interface OpcoesExecucao {
   executorFluxo?: (e: EntradaFluxo, aoEvento: (ev: Record<string, unknown>) => void) => Promise<number>;
 }
 
+/** Roda os blocos em ordem. Cada bloco sobe o app da branch uma vez e testa seus cards em ondas. */
 export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
   const { sistema } = o.artefato;
-  const aoVivo = o.aoVivo && o.alvos.length === 1; // com mais de um card, nunca ao vivo
-  o.registro.emitir('execucao_inicio', { cards: o.alvos.map((a) => a.card.card.id), modo: o.modo, aoVivo, paralelo: sistema.paralelo });
-  const fila = [...o.alvos];
-  const resultados: ResultadoCard[] = [];
-  const trabalhador = async () => {
-    for (let alvo = fila.shift(); alvo; alvo = fila.shift()) resultados.push(await testarCard(o, alvo, aoVivo));
-  };
-  await Promise.all(Array.from({ length: Math.min(sistema.paralelo, o.alvos.length) || 1 }, trabalhador));
-  o.registro.emitir('execucao_fim', { resumo: resultados.map((r) => ({ card: r.card, resultado: r.resultado })) });
-  writeFileSync(join(o.pasta, 'resultado.json'), JSON.stringify(resultados, null, 2));
-  return resultados;
+  const total = o.blocos.reduce((n, b) => n + b.ondas.flat().length, 0);
+  const aoVivo = o.aoVivo && total === 1; // com mais de um card, nunca ao vivo
+  o.registro.emitir('execucao_inicio', { blocos: o.blocos.map((b) => ({ branch: b.branch, ondas: b.ondas.map((on) => on.map((c) => c.card.id)) })), modo: o.modo, aoVivo, paralelo: sistema.paralelo });
+  const resultados = new Map<string, ResultadoCard>();
+  for (const [i, bloco] of o.blocos.entries()) await executarBloco(o, bloco, i + 1, aoVivo, resultados);
+  const lista = [...resultados.values()];
+  o.registro.emitir('execucao_fim', { resumo: lista.map((r) => ({ card: r.card, resultado: r.resultado })) });
+  writeFileSync(join(o.pasta, 'resultado.json'), JSON.stringify(lista, null, 2));
+  return lista;
 }
 
-async function testarCard(o: OpcoesExecucao, alvo: AlvoCard, aoVivo: boolean): Promise<ResultadoCard> {
-  const { card } = alvo.card;
+async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, aoVivo: boolean, resultados: Map<string, ResultadoCard>): Promise<void> {
   const { sistema } = o.artefato;
-  const pasta = join(o.pasta, card.id);
-  mkdirSync(pasta, { recursive: true });
-  const r: ResultadoCard = { card: card.id, branch: alvo.branch, resultado: 'nao_rodou', tentativas: 0, bancoZerado: !!sistema.seed, avisos: [], pasta, vizinhos: [] };
-  o.registro.emitir('card_inicio', { card: card.id, branch: alvo.branch });
+  const cards = bloco.ondas.flat();
+  o.registro.emitir('bloco_inicio', { bloco: n, branch: bloco.branch, cards: cards.map((c) => c.card.id) });
+  const novo = (c: CardAvaliado): ResultadoCard => {
+    const pasta = join(o.pasta, c.card.id);
+    mkdirSync(pasta, { recursive: true });
+    const r: ResultadoCard = { card: c.card.id, branch: bloco.branch, resultado: 'nao_rodou', tentativas: 0, bancoZerado: !!sistema.seed, avisos: [], pasta, vizinhos: [] };
+    resultados.set(c.card.id, r);
+    return r;
+  };
+  const todosNaoRodaram = (motivo: string) => {
+    for (const c of cards) {
+      o.registro.emitir('card_inicio', { card: c.card.id, branch: bloco.branch, bloco: n });
+      fim(o, novo(c), motivo);
+    }
+  };
 
   const bloqueio = verificarAlvo(sistema.url.replace('{{porta}}', '1'), sistema);
-  if (bloqueio) return fim(o, r, bloqueio);
+  if (bloqueio) return todosNaoRodaram(bloqueio);
 
   let app: AppNoAr | null = null;
   try {
     if (sistema.iniciar) {
-      app = await subirBranch(o, sistema, alvo.branch ?? 'HEAD', card.id);
-      r.sha = app.sha;
-    } else if (alvo.branch) {
+      try {
+        app = await subirBranch(o, sistema, bloco.branch ?? 'HEAD', `bloco ${n}`);
+      } catch (e) {
+        return todosNaoRodaram((e as Error).message);
+      }
+    } else if (bloco.branch) {
       const atual = await branchAtual(o.repo);
-      const semRemoto = alvo.branch.replace(/^[^/]+\//, '');
-      if (atual !== alvo.branch && atual !== semRemoto) {
-        return fim(o, r, `O sistema em ${sistema.url} roda o seu checkout atual (${atual ?? 'sem branch'}), não ${alvo.branch}. Configure sistema.iniciar para o liveflow subir a branch certa, ou faça checkout de ${alvo.branch}.`);
+      const semRemoto = bloco.branch.replace(/^[^/]+\//, '');
+      if (atual !== bloco.branch && atual !== semRemoto) {
+        return todosNaoRodaram(`O sistema em ${sistema.url} roda o seu checkout atual (${atual ?? 'sem branch'}), não ${bloco.branch}. Configure sistema.iniciar para o liveflow subir a branch certa, ou faça checkout de ${bloco.branch}.`);
       }
     }
     const url = app?.url ?? sistema.url;
+    for (const onda of bloco.ondas) {
+      const fila = [...onda];
+      const largura = Math.min(sistema.paralelo, fila.length) || 1;
+      const trabalhador = async () => {
+        for (let c = fila.shift(); c; c = fila.shift()) {
+          const r = novo(c);
+          if (app) r.sha = app.sha;
+          o.registro.emitir('card_inicio', { card: c.card.id, branch: bloco.branch, bloco: n });
+          const pendente = c.card.depende_de.find((d) => resultados.get(d)?.resultado !== 'passou');
+          if (pendente) {
+            const rd = resultados.get(pendente);
+            fim(o, r, `depende de ${pendente}, que ${rd ? ({ falhou: 'falhou', instavel: 'ficou instável', nao_rodou: 'não rodou', nao_se_aplica: 'não se aplica', passou: 'passou' } as const)[rd.resultado] : 'não rodou antes'}.`);
+            continue;
+          }
+          await testarCardNoApp(o, c, r, url, app, aoVivo);
+        }
+      };
+      await Promise.all(Array.from({ length: largura }, trabalhador));
+    }
+  } finally {
+    await app?.parar();
+  }
+}
+
+async function testarCardNoApp(o: OpcoesExecucao, alvo: CardAvaliado, r: ResultadoCard, url: string, app: AppNoAr | null, aoVivo: boolean): Promise<void> {
+  const { card } = alvo;
+  const { sistema } = o.artefato;
+  try {
     const veredito = await comRepeticao(async (n) => {
       r.tentativas = n;
       o.registro.emitir('tentativa', { card: card.id, n });
       await zerarBanco(sistema, app?.dir ?? o.repo, `${card.id}-${n}`);
-      const s = await rodarFluxo(o, card.id, card.como_testar, url, aoVivo && n === 1, join(pasta, `tentativa-${n}`), r);
+      const s = await rodarFluxo(o, card.id, card.como_testar, url, aoVivo && n === 1, join(r.pasta, `tentativa-${n}`), r);
       if (s.codigo === 2) throw new ErroAmbiente(s.erroAmbiente ?? 'ambiente');
       return s.codigo === 0;
     });
     r.resultado = veredito.resultado;
     if (veredito.resultado === 'falhou') r.certeza = 'confirmado';
     o.registro.emitir('camada_fim', { card: card.id, camada: 'fluxo', resultado: r.resultado, tentativas: veredito.tentativas });
-
-    if (o.modo !== 'rapido' && card.perfil.vizinhos !== 'nao') r.vizinhos = await testarVizinhos(o, alvo, url, app, pasta);
+    if (o.modo !== 'rapido' && card.perfil.vizinhos !== 'nao') r.vizinhos = await testarVizinhos(o, { card: alvo, branch: r.branch }, url, app, r.pasta);
+    fim(o, r);
   } catch (e) {
-    if (e instanceof ErroAmbiente) return fim(o, r, e.message);
-    return fim(o, r, `Erro do liveflow: ${(e as Error).message}`);
-  } finally {
-    await app?.parar();
+    fim(o, r, e instanceof ErroAmbiente ? e.message : `Erro do liveflow: ${(e as Error).message}`);
   }
-  return fim(o, r);
 }
 
 function fim(o: OpcoesExecucao, r: ResultadoCard, motivo?: string): ResultadoCard {
@@ -143,7 +180,7 @@ async function rodarFluxo(o: OpcoesExecucao, cardId: string, passos: EntradaFlux
     if (tipo === 'aviso' && !r.avisos.some((a) => a.mensagem === ev.mensagem)) r.avisos.push({ regra: String(ev.regra), mensagem: String(ev.mensagem) });
     if (tipo === 'passo_falhou') {
       const p = passos.find((x) => x.n === ev.n);
-      r.falha = { passo: Number(ev.n), descricao: p ? descrever(p) : 'tempo limite do fluxo', erro: String(ev.erro), motivo: String(ev.motivo) };
+      r.falha = { passo: Number(ev.n), descricao: p ? `${descrever(p)}${p.etapa ? ` (etapa ${p.etapa})` : ''}` : 'tempo limite do fluxo', erro: String(ev.erro), motivo: String(ev.motivo) };
       if (typeof ev.print === 'string') r.falha.print = ev.print;
       if (typeof ev.url === 'string') r.falha.url = ev.url;
     }

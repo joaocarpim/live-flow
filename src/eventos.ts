@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 
 export type TipoEvento =
   | 'execucao_inicio'
+  | 'bloco_inicio'
   | 'card_inicio'
   | 'copia_pronta'
   | 'app_no_ar'

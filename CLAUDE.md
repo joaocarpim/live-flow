@@ -16,19 +16,25 @@ Logo: commits formando um check (`assets/logo-liveflow.svg`). Independente do sa
 8. **O checkout da pessoa não é tocado.** Cada branch roda numa cópia (`git worktree`) que é removida no fim.
 9. **Com mais de um card, nunca ao vivo.** Ao vivo é só para um card.
 
-## Decisão: cards ou branches?
+## Decisão: só cards, em blocos (24/11/2026)
 
-O **card diz o que verificar** (critérios + passo a passo). A **branch diz qual código** está sendo verificado. As duas fontes convivem e a pessoa escolhe:
+O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da branch": a branch é só o código que o card usa (`branch:` no card). Motivo: falha precisa apontar a entrega e o critério; um fluxo da branch inteira falha vago e envelhece a cada commit.
 
-- `liveflow rodar C-01 C-02`: pelo **artefato**. O código vem de `branch:` do card (ou do checkout atual, se o card não declarar).
-- `liveflow rodar --branches feat/a,origin/feat/b`: pelas **branches**, locais e/ou remotas. Para cada branch o liveflow acha os cards dela: primeiro pela `branch:` declarada e, se não houver, por `arquivos:` em comum com o diff.
-- Branch sem card: `liveflow rascunho` cria um rascunho determinístico (id, título do commit, arquivos) **sem passos**. O passo a passo vem do Claude (`liveflow prompt passos` / `prompt artefato`).
-- Remotas: `liveflow branches --atualizar` faz `git fetch --all --prune`. Nunca é automático.
+- Escolha: `liveflow rodar C-01 C-02` ou `--todos`. `liveflow blocos ...` mostra o agrupamento antes.
+- Jornada (`tipo: jornada`, `etapas: [C-01, C-02]`): junta os passos dos cards num teste só, para o caminho de ponta a ponta. A falha diz a etapa.
+- Branches servem para **criar** cards: `mapear`, `rascunho` e `prompt artefato` (rascunho sem passos, o Claude completa).
 
-## Como um card é testado (`src/executar.ts`)
+### Como os blocos são montados (`src/blocos.ts`, determinístico)
+
+1. Bloco = cards com a mesma `branch`. Um app no ar por bloco (subir o app é a parte lenta).
+2. Ondas por `depende_de`: o dependente roda depois; se a dependência não passou, ele vira "não rodou" com o motivo. `depende_de` não carrega estado: cada card prepara o seu no seed (para estado encadeado, use jornada). Dependência fora da seleção entra sozinha e aparece como incluída.
+3. Paralelo só com dados isolados (`paralelo > 1`, que exige `iniciar` com `{{porta}}` e `seed` com `{{execucao}}`). Mesmo assim, cards que `altera` o mesmo recurso compartilhado vão em fila.
+4. `exclusivo: sim` vira bloco sozinho. Com mais de um card no total, nunca ao vivo.
+
+## Como um bloco é testado (`src/executar.ts`)
 
 1. Trava de alvo (`seguranca.ts`).
-2. Com `sistema.iniciar`: cópia da branch → `preparar` → sobe o app numa porta livre (`{{porta}}`) → espera `saude`. Sem `iniciar`: só testa se o checkout atual É a branch do card; senão "não rodou".
+2. Com `sistema.iniciar`: cópia da branch do bloco → `preparar` → sobe o app numa porta livre (`{{porta}}`) → espera `saude`. Sem `iniciar`: só testa se o checkout atual É a branch do bloco; senão todos os cards do bloco ficam "não rodou".
 3. Antes de cada tentativa: `seed` (com `{{execucao}}`).
 4. Fluxo num processo filho (`runtime/fluxo.ts`) com Playwright do projeto testado; sem o Chromium do Playwright, usa o Google Chrome instalado.
 5. `comRepeticao` → passou / falhou confirmado / instável.
@@ -37,7 +43,7 @@ O **card diz o que verificar** (critérios + passo a passo). A **branch diz qual
 
 ## Formato do artefato
 
-`.liveflow/cards.yaml`. Exemplo completo: `liveflow iniciar`. Ações de passo: `abrir` (sempre a primeira, caminho relativo), `clicar`, `preencher`, `selecionar`, `marcar`, `ver_texto`, `nao_ver_texto`, `ver_url` (glob), `api` (status + `contem` parcial), `esperar_ms` (evitar). `criterio: N` liga o passo ao critério de aceite. Card sem `como_testar` = "sem passos", não selecionável.
+`.liveflow/cards.yaml`. Exemplo completo: `liveflow iniciar`. Ações de passo: `abrir` (sempre a primeira, caminho relativo), `clicar`, `preencher`, `selecionar`, `marcar`, `ver_texto`, `nao_ver_texto`, `ver_url` (glob), `api` (status + `contem` parcial), `esperar_ms` (evitar). `criterio: N` liga o passo ao critério de aceite. Card sem `como_testar` = "sem passos", não selecionável. Campos de execução: `altera`, `depende_de`, `exclusivo`, `tipo: jornada` + `etapas`.
 
 ## Mapa do código
 
@@ -45,7 +51,8 @@ O **card diz o que verificar** (critérios + passo a passo). A **branch diz qual
 |---|---|
 | `src/tipos.ts` | tipos compartilhados |
 | `src/artefato.ts` | lê e valida o YAML; estado de cada card |
-| `src/fontes.ts` | artefato × branches, vínculo card↔branch, rascunho, glob |
+| `src/blocos.ts` | blocos (1 app por branch), ondas por dependência e `altera`, exclusivos |
+| `src/fontes.ts` | branch → cards (para criar cards), rascunho, glob |
 | `src/git.ts` | branches locais/remotas, diff de três pontos, commits, worktree (sempre execFile) |
 | `src/runtime/fluxo.ts` | executor do navegador (processo filho), localizadores sem chute |
 | `src/executar.ts` | orquestração, app da branch, seed, repetição, vizinhos |
@@ -57,7 +64,7 @@ O **card diz o que verificar** (critérios + passo a passo). A **branch diz qual
 
 ## Comandos de desenvolvimento
 
-- `npm test`: 39 testes (git real com branch local e remota, app subindo por branch).
+- `npm test`: 46 testes (git real com branch local e remota, app subindo por branch).
 - `LIVEFLOW_PW_NODE_MODULES=/caminho/node_modules npm test`: inclui o ponta a ponta com navegador de verdade.
 - `npm run typecheck`, `npm run build` (gera `dist/` para publicar).
 
@@ -65,8 +72,8 @@ O **card diz o que verificar** (critérios + passo a passo). A **branch diz qual
 
 | Versão | Entrega |
 |---|---|
-| 0.1 (feita) | artefato, fontes (artefato / branches locais e remotas), passo a passo determinístico, cópia por branch, seed por tentativa, repetição, vizinhos, trava de alvo, eventos, prompts, CLI |
-| 0.2 | extensão VS Code: lista de cards, escolha da fonte (artefato / branches locais / remotas), ao vivo com navegador visível, resultados, botões "Resolver com Claude" (copiar + abrir Claude Code), segredos no SecretStorage |
+| 0.1 (feita) | artefato, passo a passo determinístico, jornadas, blocos (1 app por branch, ondas, paralelo seguro), seed por tentativa, repetição, vizinhos, trava de alvo, eventos, prompts, CLI |
+| 0.2 | extensão VS Code: lista de cards, prévia dos blocos, criar cards das branches locais/remotas, ao vivo com navegador visível, resultados, botões "Resolver com Claude" (copiar + abrir Claude Code), segredos no SecretStorage |
 | 0.3 | Código: estática diff-aware (Semgrep, gitleaks), dependências (OSV), unitária dos arquivos do card, cobertura só das linhas do diff |
 | 0.4 | API e dados: permissões por perfil (a partir de `perfis`), contrato OpenAPI, webhooks repetidos e fora de ordem |
 | 0.5 | Segurança, só em permitidos: ataques comuns, sessão e cabeçalhos, upload, fuzzing, LGPD |

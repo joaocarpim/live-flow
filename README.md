@@ -13,15 +13,32 @@ liveflow cards                 # quais cards podem ser testados
 
 ## Escolher o que testar
 
+O liveflow testa cards. Cards da mesma branch viram um bloco e dividem o mesmo app.
+
 ```bash
-liveflow rodar C-01 C-02                        # pelos cards do artefato
-liveflow branches --atualizar                   # lista branches locais e remotas
-liveflow mapear --branches feat/login,origin/feat/agenda
-liveflow rodar --branches feat/login --modo rapido
-liveflow rodar C-01 --ao-vivo                   # um card só, com o navegador visível
+liveflow blocos C-01 C-02 C-05      # mostra os blocos antes de rodar
+liveflow rodar C-01 C-02 C-05
+liveflow rodar --todos --modo rapido
+liveflow rodar C-01 --ao-vivo       # um card só, com o navegador visível
 ```
 
-Branch sem card: `liveflow rascunho --branches feat/x` gera o card sem passos e `liveflow prompt artefato --branches feat/x` gera o texto para o Claude completar.
+```text
+Bloco 1 · feat/aprovacao · 1 app
+   juntos:          C-01 Aprovação  │  C-08 Fotos da vistoria
+   depois:          C-05 Edição do orçamento
+Bloco 2 · feat/login · 1 app
+   primeiro:        C-03 Login
+   depois:          C-09 Recuperar senha
+```
+
+## Criar cards a partir das branches
+
+```bash
+liveflow branches --atualizar                 # locais e remotas
+liveflow mapear --branches feat/x,origin/feat/y
+liveflow rascunho --branches feat/x           # card sem passos
+liveflow prompt artefato --branches feat/x    # texto para o Claude completar
+```
 
 ## Quando falha
 
