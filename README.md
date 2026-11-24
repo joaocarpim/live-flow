@@ -146,7 +146,7 @@ Lista de cards, prévia dos blocos, execução ao vivo com a tela do app dentro 
 </tr>
 </table>
 
-Instalação: baixe o [`liveflow-0.1.0.vsix`](https://github.com/joaocarpim/live-flow/releases/latest) da última release e use **Extensões → … → Instalar a partir de VSIX**. Mais em [docs/extensao.md](docs/extensao.md).
+Instalação: baixe o `.vsix` da [última release](https://github.com/joaocarpim/live-flow/releases/latest) e use **Extensões → … → Instalar a partir de VSIX** (no Marketplace, ela vai aparecer como **liveflow cards**). Mais em [docs/extensao.md](docs/extensao.md).
 
 ## Com o Claude Code
 

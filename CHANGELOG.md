@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 (2026-11-24)
+
+- Extensão no Marketplace com o identificador `liveflow-cards` e o nome "liveflow cards: testes de fluxo" (o nome `liveflow` já existia lá). Comandos, configurações e a CLI continuam `liveflow`.
+
 ## 0.1.1 (2026-11-24)
 
 - Extensão do VS Code pronta para o Marketplace: publisher `JooVitorAparecidoCarpimdeSouza`, página da extensão com prints, licença no pacote.
