@@ -466,7 +466,21 @@
     const texto = S.prompts[chave];
     return [
       h('div', { class: 'cab' }, h('h1', {}, 'Criar artefato')),
-      h('div', { class: 'aviso' }, svg(I.info, 'var(--azul)'), h('span', {}, 'O liveflow testa cards, e os cards vivem no artefato .liveflow/cards.yaml. Cole abaixo os cards do seu quadro (id, título, descrição, critérios e a branch onde foram feitos). O Claude lê o código e escreve o artefato com o passo a passo de cada um. Para um card que já existe, também dá para gravar o passo a passo fazendo o fluxo no navegador (botão "Gravar passo a passo no navegador", na tela do card).')),
+      h('div', { class: 'aviso' }, svg(I.info, 'var(--azul)'), h('span', {}, 'O liveflow testa cards, e os cards vivem no artefato .liveflow/cards.yaml. Cole abaixo os cards do seu quadro (id, título, descrição, critérios e a branch onde foram feitos). O Claude recebe também o que o liveflow encontrou no projeto, lê o código e escreve o artefato: como subir o sistema e o passo a passo de cada card. Depois é só rodar, com o preview ao vivo. Para um card que já existe, também dá para gravar o passo a passo fazendo o fluxo no navegador (botão "Gravar passo a passo no navegador", na tela do card).')),
+      (() => {
+        const p = S.estado && S.estado.ambiente && S.estado.ambiente.projeto;
+        if (!p) return null;
+        const exemplo = S.estado.ambiente.itens.some((i) => i.nome === 'Cards do seu projeto' && !i.ok);
+        return h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'O que o liveflow encontrou no projeto'), h('span', { class: 'mudo peq' }, 'vai junto no texto para o Claude')),
+          exemplo ? h('div', { class: 'aviso verm', style: 'margin-bottom:12px' }, svg(I.alerta, 'var(--vermelho)'), h('span', {}, 'O artefato atual ainda é o exemplo (sistema e cards de mentira). O Claude vai trocar tudo pelo sistema e pelos cards do seu projeto.')) : null,
+          !p.repos.length ? h('div', { class: 'mudo' }, 'Nenhum repositório git nesta pasta nem nas subpastas.') :
+          h('div', { class: 'lista' }, p.repos.map((r) => h('div', { class: 'linha', style: 'align-items:flex-start' },
+            svg(I.ok, 'var(--verde)'),
+            h('div', { style: 'flex:1' },
+              h('div', { style: 'font-weight:500' }, r.pasta, r.branchAtual ? h('span', { class: 'mudo peq', style: 'margin-left:8px' }, r.branchAtual) : null, r.copias ? h('span', { class: 'mudo peq', style: 'margin-left:8px' }, '+' + r.copias + ' worktree(s)') : null),
+              h('div', { class: 'peq mudo' }, [r.tecnologias.join(', '), r.gerenciador, r.docker.length ? 'docker' : ''].filter(Boolean).join(' · ') || 'sem package.json'),
+              Object.keys(r.scripts).length ? h('div', { class: 'm peq', style: 'margin-top:4px' }, Object.entries(r.scripts).map(([n, c]) => h('div', {}, n + ': ' + c))) : null)))));
+      })(),
       h('div', { class: 'cartao' }, h('div', { class: 'sec' }, h('h2', {}, 'Seus cards')),
         h('textarea', { class: 'prompt', placeholder: 'C-10 · Cliente aceita o orçamento pelo link (branch feat/aceite)\nCritérios:\n1. O cliente abre o link e vê o valor total\n2. Ao aceitar, o status vira "aprovado"', oninput: (e) => { S.textoCards = e.target.value; } }, S.textoCards),
         h('div', { class: 'acoes', style: 'margin-top:12px' },

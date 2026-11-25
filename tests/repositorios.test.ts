@@ -96,3 +96,52 @@ test('ambiente mostra os repositórios achados', async () => {
   assert.match(item.detalhe, /2 repositório\(s\): backend, frontend/);
   assert.ok(itens.some((i) => i.nome === 'Repositório de cada serviço' && i.resolver === 'repo: backend'));
 });
+
+test('worktrees (ex.: wt/cripto/backend) contam como o mesmo repositório, pela pasta principal', async () => {
+  const raiz = pastaDeRepos();
+  g(join(raiz, 'backend'), 'branch', 'feat/cripto');
+  mkdirSync(join(raiz, 'wt', 'cripto'), { recursive: true });
+  g(join(raiz, 'backend'), 'worktree', 'add', '-q', join(raiz, 'wt', 'cripto', 'backend'), 'feat/cripto');
+  g(join(raiz, 'frontend'), 'worktree', 'add', '-q', join(raiz, 'wt', 'tela', 'frontend'), 'feat/tela');
+  assert.deepEqual((await lerRaiz(raiz)).repos, ['backend', 'frontend']);
+  // a branch que está aberta numa worktree ainda roda numa cópia própria
+  const yaml = SISTEMA('    - { nome: web, iniciar: "node app.mjs {{porta}}", repo: frontend }\n') + 'cards:\n  - { id: C-01, titulo: tela, branch: feat/tela, como_testar: [ { abrir: / } ] }\n';
+  const { res, vistos } = await rodar(raiz, yaml, ['C-01']);
+  assert.equal(res[0]!.resultado, 'passou');
+  assert.match(vistos['C-01']!, /frontend-tela/);
+});
+
+test('levantamento do projeto: scripts, tecnologias e só os nomes das variáveis', async () => {
+  const { levantarProjeto, descreverProjeto } = await import('../src/projeto.ts');
+  const raiz = pastaDeRepos();
+  commit(join(raiz, 'backend'), 'pkg', {
+    'package.json': JSON.stringify({ scripts: { dev: 'nest start --watch', lint: 'eslint .', 'db:seed': 'prisma db seed' }, dependencies: { '@nestjs/core': '1', prisma: '1' } }),
+    'package-lock.json': '{}',
+    '.env.example': 'PORT=3000\nDATABASE_URL=postgres://u:senha@localhost/db\nJWT_SECRET=abc\n',
+    'docker-compose.yml': 'services: {}\n',
+  });
+  const p = await levantarProjeto(raiz);
+  const b = p.repos.find((r) => r.pasta === 'backend')!;
+  assert.deepEqual(b.scripts, { dev: 'nest start --watch', 'db:seed': 'prisma db seed' });
+  assert.deepEqual(b.tecnologias, ['NestJS', 'Prisma']);
+  assert.deepEqual(b.variaveis, ['PORT', 'DATABASE_URL']);
+  const texto = descreverProjeto(p);
+  assert.match(texto, /junta 2 repositório\(s\)/);
+  assert.doesNotMatch(texto, /senha|abc|JWT_SECRET/, 'valores e variáveis sem relação ficam de fora');
+});
+
+test('artefato de exemplo: nada roda, e o motivo manda criar o artefato', async () => {
+  const { ehArtefatoDeExemplo } = await import('../src/artefato.ts');
+  const raiz = pastaDeRepos();
+  const yaml = '# EXEMPLO. cards de mentira\n' + SISTEMA('    - { nome: web, iniciar: "node app.mjs {{porta}}", repo: frontend }\n') + 'cards:\n  - { id: C-01, titulo: tela, branch: feat/tela, como_testar: [ { abrir: / } ] }\n';
+  escrever(raiz, '.liveflow/cards.yaml', yaml);
+  assert.equal(ehArtefatoDeExemplo(raiz), true);
+  const art = lerArtefato(yaml);
+  const pasta = mkdtempSync(join(tmpdir(), 'lf-exec-'));
+  let chamou = false;
+  const res = await executar({ repo: raiz, artefato: art, blocos: montarBlocos(art.cards, ['C-01'], { dadosIsolados: false }).blocos, aoVivo: false, modo: 'rapido', registro: new Registro(join(pasta, 'e.ndjson')), pasta, ehExemplo: true, executorFluxo: async () => ((chamou = true), 0) });
+  assert.equal(chamou, false);
+  assert.match(res[0]!.motivo!, /ainda é o exemplo.*Criar artefato/);
+  const { itens } = await diagnosticar(raiz, art);
+  assert.ok(itens.some((i) => i.nome === 'Cards do seu projeto' && !i.ok));
+});

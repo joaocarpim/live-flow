@@ -65,6 +65,7 @@ sistema:
 - Serviço sem `repo:`: com um repositório só, usa ele; com vários, usa o único que tiver a branch do card. Se a branch estiver em mais de um, o card não roda e pede o `repo:`.
 - `arquivos` dos cards ficam com o caminho a partir da raiz (`frontend/src/...`).
 - O `seed` roda na cópia do primeiro serviço.
+- Worktrees (ex.: `wt/cripto/backend`) contam como o mesmo repositório da pasta principal (`backend`). A branch aberta numa worktree roda mesmo assim, numa cópia própria.
 
 ## `variaveis`
 

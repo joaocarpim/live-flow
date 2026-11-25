@@ -50,7 +50,7 @@ Resultado por card com o commit testado, pendências de conferência manual e vi
 **Resolver com Claude** copia o texto e abre o Claude Code no terminal do projeto; você cola e envia. Colar sozinho não é garantido em todo ambiente, por isso o texto sempre vai para a área de transferência.
 
 ### Criar artefato
-Cole os cards do seu quadro (id, título, critérios, branch) e clique em **Gerar texto para o Claude**. O Claude lê o código e escreve o `.liveflow/cards.yaml` com o passo a passo de cada card. Para um card que já existe, a tela do card também tem **Gravar passo a passo no navegador**.
+Mostra o que o liveflow encontrou no projeto, sem IA: repositórios (worktrees contam uma vez), tecnologias, scripts de subir e de seed, docker e os nomes das variáveis do `.env` de exemplo. Cole os cards do seu quadro (id, título, critérios, branch) e clique em **Gerar texto para o Claude**: o texto leva esse levantamento, e o Claude escreve o `.liveflow/cards.yaml` inteiro, com o bloco `sistema` (como subir cada serviço) e o passo a passo de cada card. Para um card que já existe, a tela do card também tem **Gravar passo a passo no navegador**.
 
 <img src="imagens/08-criar.png" alt="Criar artefato">
 

@@ -91,6 +91,8 @@ export interface OpcoesExecucao {
   repo: string;
   /** Preenchido pelo executar: onde estão os repositórios. */
   raiz?: Raiz;
+  /** O artefato ainda é o exemplo do "liveflow iniciar": nada roda. */
+  ehExemplo?: boolean;
   artefato: Artefato;
   blocos: Bloco[];
   aoVivo: boolean;
@@ -116,7 +118,10 @@ export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
   const resultados = new Map<string, ResultadoCard>();
   // sem git não dá para saber qual código foi testado: nenhum card roda, e o motivo diz o que fazer
   o.raiz = await lerRaiz(o.repo);
-  if (!o.raiz.repos.length) {
+  const impedimento = o.ehExemplo
+    ? 'O artefato .liveflow/cards.yaml ainda é o exemplo do "liveflow iniciar": o sistema (npm run dev) e os cards (feat/login, feat/aceite...) são de mentira. Abra a aba "Criar artefato", cole os seus cards e passe o texto para o Claude: ele escreve o sistema do seu projeto e o passo a passo de cada card.'
+    : !o.raiz.repos.length ? SEM_GIT(o.repo) : '';
+  if (impedimento) {
     for (const [i, bloco] of o.blocos.entries()) {
       for (const c of bloco.ondas.flat()) {
         const pasta = join(o.pasta, c.card.id);
@@ -124,7 +129,7 @@ export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
         const r: ResultadoCard = { card: c.card.id, branch: bloco.branch, resultado: 'nao_rodou', tentativas: 0, bancoZerado: !!sistema.seed, avisos: [], pendencias: [], pasta, vizinhos: [] };
         resultados.set(c.card.id, r);
         o.registro.emitir('card_inicio', { card: c.card.id, branch: bloco.branch, bloco: i + 1 });
-        fim(o, r, SEM_GIT(o.repo));
+        fim(o, r, impedimento);
       }
     }
   } else {

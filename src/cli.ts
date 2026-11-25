@@ -3,9 +3,10 @@ import { parseArgs } from 'node:util';
 import { join, resolve } from 'node:path';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { stringify } from 'yaml';
-import { carregarArtefato, CAMINHO_ARTEFATO } from './artefato.ts';
+import { carregarArtefato, CAMINHO_ARTEFATO, ehArtefatoDeExemplo } from './artefato.ts';
 import { alvosDasBranches } from './fontes.ts';
 import { montarBlocos, descreverBlocos } from './blocos.ts';
+import { descreverProjeto, levantarProjeto } from './projeto.ts';
 import { arquivosDaBranch, branchesAtuais, lerRaiz, reposComBranch } from './repositorios.ts';
 import { montarPlano } from './plano.ts';
 import type { Modo } from './plano.ts';
@@ -145,7 +146,7 @@ async function main(): Promise<number> {
       const pasta = op.pasta ?? join(repo, '.liveflow', 'execucoes', new Date().toISOString().replace(/[:.]/g, '-'));
       const registro = new Registro(join(pasta, 'events.ndjson'));
       if (!op.json) registro.ouvintes.push(mostrarAoVivo);
-      const res = await executar({ repo, artefato: art, blocos: plano.blocos, aoVivo: op['ao-vivo']!, ...(ids.length ? { aoVivoCards: ids } : {}), modo, registro, pasta });
+      const res = await executar({ repo, artefato: art, blocos: plano.blocos, aoVivo: op['ao-vivo']!, ...(ids.length ? { aoVivoCards: ids } : {}), modo, registro, pasta, ehExemplo: ehArtefatoDeExemplo(repo) });
       if (op.junit) writeFileSync(op.junit, junit(res));
       if (op.json) console.log(JSON.stringify(res, null, 2));
       else resumo(res, pasta);
@@ -161,7 +162,7 @@ async function main(): Promise<number> {
         console.log(promptPassos(c.card, ctx));
       } else if (tipo === 'artefato') {
         const texto = op.de ? readFileSync(op.de, 'utf8') : '';
-        console.log(promptArtefato(texto, art.cards.map((c) => c.card.id)));
+        console.log(promptArtefato(texto, art.cards.map((c) => c.card.id), { projeto: descreverProjeto(await levantarProjeto(repo)), ehExemplo: ehArtefatoDeExemplo(repo) }));
       } else if (tipo === 'resolver') {
         const r = ultimaFalha(id);
         const c = art.cards.find((x) => x.card.id === id);
@@ -184,7 +185,7 @@ async function main(): Promise<number> {
       return 0;
     }
     case 'ambiente': {
-      const info = await diagnosticar(repo, art);
+      const info = { ...(await diagnosticar(repo, art)), projeto: await levantarProjeto(repo) };
       saida(info, () => info.itens.map((i) => `${i.ok ? '✓' : '✗'} ${i.nome.padEnd(28)} ${i.detalhe}`).join('\n'));
       return info.itens.every((i) => i.ok || i.opcional) ? 0 : 1;
     }

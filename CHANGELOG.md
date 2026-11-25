@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.10 (2026-11-25)
+
+- Worktrees contam uma vez: pastas como `wt/cripto/backend` são cópias de trabalho do mesmo repositório (`backend`), não repositórios novos. Antes, uma raiz com `backend`, `frontend` e as worktrees aparecia como 13 repositórios.
+- Levantamento do projeto, sem IA: repositórios, tecnologias, scripts de subir e de seed, docker e os nomes das variáveis do `.env` de exemplo. Aparece na aba Criar artefato e vai no texto para o Claude, que agora escreve também o bloco `sistema` (como subir cada serviço, com `repo:`), não só os cards.
+- Artefato de exemplo: enquanto o `cards.yaml` for o do `liveflow iniciar`, nada roda e o motivo manda criar o artefato. A aba Ambiente avisa.
+
 ## 0.1.9 (2026-11-25)
 
 - Pasta raiz que junta vários repositórios (ex.: `reidseg/frontend` e `reidseg/backend`): quando a pasta aberta não é um repositório git, o liveflow procura os repositórios nas subpastas (até 3 níveis, sem `node_modules`). Cada serviço roda no repositório dele (`repo: frontend`); sem `repo:`, usa o único repositório ou o único que tem a branch do card. A aba Ambiente mostra os repositórios achados.

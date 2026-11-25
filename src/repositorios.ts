@@ -5,7 +5,7 @@
 
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { arquivosMudados, branchAtual, ehRepositorio, shaDe } from './git.ts';
+import { arquivosMudados, branchAtual, ehRepositorio, git, shaDe } from './git.ts';
 
 export interface Raiz {
   /** A própria pasta raiz é um repositório. */
@@ -47,8 +47,18 @@ export function acharRepositorios(raiz: string, profundidade = 3): string[] {
 
 export async function lerRaiz(raiz: string): Promise<Raiz> {
   if (await ehRepositorio(raiz)) return { raizEhRepo: true, repos: ['.'] };
-  const repos: string[] = [];
-  for (const r of acharRepositorios(raiz)) if (await ehRepositorio(join(raiz, r))) repos.push(r);
+  // Worktrees (ex.: wt/cripto/backend) são cópias de trabalho do mesmo repositório: contam uma vez só.
+  // Fica a pasta do checkout principal (onde .git é uma pasta), não a da cópia.
+  const porRepo = new Map<string, { rel: string; principal: boolean }[]>();
+  for (const r of acharRepositorios(raiz)) {
+    const dir = join(raiz, r);
+    if (!(await ehRepositorio(dir))) continue;
+    const comum = await git(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']).then((x) => x.trim(), () => dir);
+    const lista = porRepo.get(comum) ?? [];
+    lista.push({ rel: r, principal: statSync(join(dir, '.git')).isDirectory() });
+    porRepo.set(comum, lista);
+  }
+  const repos = [...porRepo.values()].map((l) => (l.find((x) => x.principal) ?? [...l].sort((a, b) => a.rel.length - b.rel.length)[0]!).rel).sort();
   return { raizEhRepo: false, repos };
 }
 

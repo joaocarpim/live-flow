@@ -36,20 +36,42 @@ export function promptPassos(card: Card, contexto?: { arquivos: string[]; commit
 }
 
 /** Texto para o Claude criar (ou completar) o artefato .liveflow/cards.yaml a partir dos cards da pessoa. */
-export function promptArtefato(cardsDaPessoa: string, jaExistem: string[]): string {
+export interface ContextoArtefato {
+  /** Levantamento do projeto (repositórios, scripts, tecnologias), feito pelo liveflow sem IA. */
+  projeto?: string;
+  /** O artefato atual ainda é o exemplo do "liveflow iniciar". */
+  ehExemplo?: boolean;
+}
+
+/** Texto para o Claude criar (ou completar) o artefato .liveflow/cards.yaml: o bloco sistema e os cards da pessoa. */
+export function promptArtefato(cardsDaPessoa: string, jaExistem: string[], ctx: ContextoArtefato = {}): string {
   const texto = cardsDaPessoa.trim();
   return [
-    'Crie ou complete o arquivo .liveflow/cards.yaml do liveflow com estes cards.',
-    'Cada card do artefato: id, titulo, descricao, branch (a branch onde o card foi feito), arquivos, criterios e como_testar (o passo a passo completo).',
+    'Crie ou complete o arquivo .liveflow/cards.yaml do liveflow: o bloco "sistema" (como subir o sistema para testar) e os cards abaixo.',
+    ctx.ehExemplo ? 'O artefato atual é o EXEMPLO do "liveflow iniciar": o sistema e os cards dele (C-01, C-02, C-03, J-01, feat/login, feat/aceite) são de mentira. Substitua tudo.' : '',
+    '',
+    ctx.projeto ? 'O que o liveflow encontrou no projeto (sem IA):' : '',
+    ctx.projeto ?? '',
+    '',
+    'Bloco "sistema" (leia o código, os package.json, o docker-compose e o README de cada repositório para acertar):',
+    '- servicos: um por processo que precisa estar no ar (ex.: api e web). Cada um com nome, iniciar (o comando, com {{porta}} no lugar da porta), saude (um caminho que responde 200 quando ele está pronto), repo (a pasta do repositório, quando a raiz junta repositórios) e preparar se precisar instalar algo.',
+    '- O web costuma precisar do endereço da api: use {{url.api}} (ou {{porta.api}}) no comando dele, ou a variável LIVEFLOW_URL_API.',
+    '- url: o endereço que o navegador abre, normalmente http://localhost:{{porta.web}}. permitidos: [localhost, 127.0.0.1]. producao: os domínios de produção, que nunca são alvo.',
+    '- seed: o comando que deixa o banco num estado conhecido antes de cada teste, se o projeto tiver (seed, migrate + seed, fixtures). Se não tiver, deixe sem e diga isso no fim.',
+    '- base: a branch principal (main ou master).',
+    '- Banco, Redis e outros serviços de infraestrutura não sobem pelo liveflow: diga no fim o que precisa estar rodando antes (ex.: docker compose up -d db).',
+    '- Senhas e tokens: só {{segredo:nome}}, nunca o valor. Diga no fim quais segredos a pessoa precisa definir.',
+    '',
+    'Cards: id, titulo, descricao, branch (a branch onde o card foi feito, no repositório certo), arquivos (caminho a partir da pasta raiz), criterios e como_testar (o passo a passo completo).',
     'Leia o código da aplicação para escrever passos que existem de verdade na tela: textos de botão, rótulos de campo e caminhos reais.',
-    jaExistem.length ? `Já existem no artefato: ${jaExistem.join(', ')}. Complete os que estiverem sem passos e não duplique.` : '',
+    jaExistem.length && !ctx.ehExemplo ? `Já existem no artefato: ${jaExistem.join(', ')}. Complete os que estiverem sem passos e não duplique.` : '',
     '',
     texto ? 'Cards:' : 'Cards: use os que eu passar nesta conversa (id, título, descrição, critérios e branch).',
     texto,
     '',
     REGRAS_PASSOS,
     '',
-    'Não altere código da aplicação. No fim, rode "liveflow cards" e confirme que todos aparecem como prontos.',
+    'Não altere código da aplicação. No fim, rode "liveflow ambiente" e "liveflow cards", e confirme que o sistema está configurado e todos os cards aparecem como prontos.',
   ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').trim();
 }
 

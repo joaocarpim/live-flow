@@ -124,4 +124,9 @@ test('prompt do artefato parte dos cards da pessoa, não das branches', () => {
   assert.match(t, /como_testar/);
   assert.doesNotMatch(t, /rascunho/);
   assert.match(promptArtefato('', []), /use os que eu passar nesta conversa/);
+  const comProjeto = promptArtefato('', ['C-01'], { projeto: '- backend\n  script dev: nest start', ehExemplo: true });
+  assert.match(comProjeto, /script dev: nest start/);
+  assert.match(comProjeto, /EXEMPLO.*Substitua tudo/);
+  assert.match(comProjeto, /servicos: um por processo/);
+  assert.doesNotMatch(comProjeto, /Já existem no artefato/);
 });

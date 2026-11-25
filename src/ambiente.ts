@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { verificarAlvo } from './seguranca.ts';
 import type { Artefato } from './tipos.ts';
-import { CAMINHO_ARTEFATO } from './artefato.ts';
+import { CAMINHO_ARTEFATO, ehArtefatoDeExemplo } from './artefato.ts';
 import { lerRaiz } from './repositorios.ts';
 
 const exec = promisify(execFile);
@@ -25,6 +25,7 @@ export async function diagnosticar(repo: string, art: Artefato): Promise<{ itens
   const itens: ItemAmbiente[] = [];
   const temArtefato = existsSync(join(repo, CAMINHO_ARTEFATO));
   itens.push({ nome: 'Artefato de cards', ok: temArtefato && !art.problemas.length, detalhe: temArtefato ? (art.problemas[0] ?? CAMINHO_ARTEFATO) : 'não existe', ...(temArtefato ? {} : { resolver: 'liveflow iniciar' }) });
+  if (temArtefato && ehArtefatoDeExemplo(repo)) itens.push({ nome: 'Cards do seu projeto', ok: false, detalhe: 'o artefato ainda é o exemplo do "liveflow iniciar": sistema e cards de mentira (feat/login, feat/aceite...). Use a aba Criar artefato para o Claude escrever o sistema e os seus cards.', resolver: 'liveflow prompt artefato' });
   const raiz = await lerRaiz(repo);
   const temGit = raiz.repos.length > 0;
   itens.push({ nome: 'Repositório git', ok: temGit, detalhe: raiz.raizEhRepo ? 'ok' : temGit ? `pasta com ${raiz.repos.length} repositório(s): ${raiz.repos.join(', ')}` : 'nenhum repositório git nesta pasta nem nas subpastas: sem ele nenhum card roda', ...(temGit ? {} : { resolver: 'git init && git add -A && git commit -m "inicial"' }) });

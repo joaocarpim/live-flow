@@ -39,7 +39,7 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 
 1. Trava de alvo (`seguranca.ts`).
 2. Com `sistema.servicos` (ou `iniciar`, que vira o serviço `app`): para cada serviço, cópia da branch → dependências (node_modules do seu checkout via link quando o lockfile é idêntico; senão `preparar`) → portas livres para todos → sobe cada um (`{{porta}}`, `{{porta.x}}`, `{{url.x}}`, env `LIVEFLOW_URL_X`) → espera `saude`. Serviço com `repo:` usa a branch de mesmo nome naquele repositório, senão a base dele (anotado). Sem serviços: só testa se o checkout atual É a branch do bloco; senão todos ficam "não rodou". Cópias de execuções interrompidas são limpas com `git worktree prune`.
-   Raiz sem git (`src/repositorios.ts`): procura repositórios nas subpastas (até 3 níveis). Serviço usa `repo:`; sem ele, o único repositório, ou o único com a branch (se houver mais de um, não chuta: "não rodou"). Branch ausente em todos os repositórios usados = "não rodou". Sem nenhum repositório = "não rodou" com o comando que resolve.
+   Raiz sem git (`src/repositorios.ts`): procura repositórios nas subpastas (até 3 níveis; worktrees do mesmo repositório contam uma vez). Serviço usa `repo:`; sem ele, o único repositório, ou o único com a branch (se houver mais de um, não chuta: "não rodou"). Branch ausente em todos os repositórios usados = "não rodou". Sem nenhum repositório = "não rodou" com o comando que resolve.
 3. Antes de cada tentativa: `seed` (com `{{execucao}}`).
 4. Fluxo num processo filho (`runtime/fluxo.ts`) com Playwright do projeto testado; sem o Chromium do Playwright, usa o Google Chrome instalado. Uma sessão de navegador por conta (`como:`); login na primeira vez que a conta aparece; com `reaproveitar`, a sessão fica guardada no bloco e é confirmada pelos passos de `verificar` antes de usar. `dispositivo: celular` emula iPhone 13 (390 px, toque).
    Quando um alvo não é encontrado, lista os parecidos que existem na tela (sem IA) para separar "texto mudou" de "bug".
@@ -56,6 +56,7 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 - `contas`: `entrar` (passos de login), `verificar` (passos que confirmam a sessão), `reaproveitar`.
 - Card: `branch`, `arquivos`, `criterios`, `como_testar`, `altera`, `depende_de`, `exclusivo`, `dispositivo` (desktop/celular), `entregue`, `tipo: jornada` + `etapas`, `testes` (perfil das camadas).
 - Card sem `como_testar` = "sem passos", não selecionável.
+- Artefato que ainda é o exemplo do `iniciar` (começa com `# EXEMPLO` ou tem `app.suaempresa.com.br`): nada roda, e o motivo manda criar o artefato.
 
 ## Mapa do código
 
@@ -65,6 +66,7 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 | `src/artefato.ts` | lê e valida o YAML; estado de cada card |
 | `src/blocos.ts` | blocos (1 app por branch), ondas por dependência e `altera`, exclusivos |
 | `src/fontes.ts` | cards escolhidos → alvos; contexto da branch (arquivos e commits) para o `prompt passos`; glob |
+| `src/projeto.ts` | levantamento do projeto sem IA (scripts, tecnologias, docker, nomes de variáveis) para o `prompt artefato` |
 | `src/repositorios.ts` | raiz que é repositório ou que junta repositórios; arquivos da branch com caminho a partir da raiz |
 | `src/git.ts` | branches locais/remotas, diff de três pontos, commits, worktree (sempre execFile) |
 | `src/runtime/fluxo.ts` | executor do navegador (processo filho), localizadores sem chute |
@@ -89,7 +91,7 @@ O liveflow testa **cards**. Não existe "rodar por branch" nem "como testar da b
 
 ## Comandos de desenvolvimento
 
-- `npm test`: 77 testes (git real com branch local e remota, dois repositórios, app subindo por branch, Mailpit falso).
+- `npm test`: 80 testes (git real com branch local e remota, dois repositórios, app subindo por branch, Mailpit falso).
 - `LIVEFLOW_PW_NODE_MODULES=/caminho/node_modules npm test`: inclui os 3 testes com navegador de verdade (duas pessoas, foto, celular, e-mail, sessão reaproveitada, sugestão de texto, gravador).
 - `npm run typecheck`, `npm run build` (gera `dist/`; roda sozinho no `prepare` ao instalar pelo GitHub).
 - Extensão: `cd extensao && node build.mjs` e `npx --prefix .. vsce package --no-dependencies` (publisher no Marketplace: `JooVitorAparecidoCarpimdeSouza`).

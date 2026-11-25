@@ -8,6 +8,16 @@ import type { Artefato, Card, CardAvaliado, Conta, PassoCard, PerfilCard, Servic
 
 export const CAMINHO_ARTEFATO = '.liveflow/cards.yaml';
 
+/** O artefato ainda é o exemplo do "liveflow iniciar" (cards e sistema de mentira)? */
+export function ehArtefatoDeExemplo(repo: string): boolean {
+  try {
+    const t = readFileSync(join(repo, CAMINHO_ARTEFATO), 'utf8');
+    return t.startsWith('# EXEMPLO') || t.includes('app.suaempresa.com.br');
+  } catch {
+    return false;
+  }
+}
+
 export function caminhoArtefato(raiz: string): string {
   return join(raiz, CAMINHO_ARTEFATO);
 }
