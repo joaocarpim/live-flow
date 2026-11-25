@@ -2,7 +2,7 @@
   "name": "liveflow-cards",
   "displayName": "liveflow cards: testes de fluxo",
   "description": "Testa o fluxo de tela de cada card, em blocos, antes de entregar. Sem IA na execução.",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "publisher": "JooVitorAparecidoCarpimdeSouza",
   "license": "MIT",
   "repository": {
@@ -73,7 +73,7 @@
     "build": "node build.mjs",
     "pacote": "node build.mjs && vsce package --no-dependencies -o liveflow.vsix"
   },
-  "homepage": "https://github.com/joaocarpim/live-flow#readme",
+  "homepage": "https://joaocarpim.github.io/live-flow/",
   "bugs": {
     "url": "https://github.com/joaocarpim/live-flow/issues"
   },

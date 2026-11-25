@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.11 (2026-11-25)
+
+- Site do liveflow em `site/`, publicado no GitHub Pages (https://joaocarpim.github.io/live-flow/): o que ele faz, como funciona, prints e os três jeitos de instalar (VS Code, terminal e CI, Claude Code). A extensão aponta para ele como página inicial.
+
 ## 0.1.10 (2026-11-25)
 
 - Worktrees contam uma vez: pastas como `wt/cripto/backend` são cópias de trabalho do mesmo repositório (`backend`), não repositórios novos. Antes, uma raiz com `backend`, `frontend` e as worktrees aparecia como 13 repositórios.

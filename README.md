@@ -13,7 +13,7 @@
 [![VS Code](https://img.shields.io/badge/VS%20Code-extens%C3%A3o-007ACC.svg?logo=visualstudiocode&logoColor=white)](docs/extensao.md)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-D97757.svg)](docs/claude.md)
 
-[Início rápido](#início-rápido) · [Como funciona](#como-funciona) · [Extensão](#extensão-do-vs-code) · [Claude Code](#com-o-claude-code) · [CI](#no-ci) · [Documentação](docs)
+**[Site](https://joaocarpim.github.io/live-flow/)** · [Início rápido](#início-rápido) · [Como funciona](#como-funciona) · [Extensão](#extensão-do-vs-code) · [Claude Code](#com-o-claude-code) · [CI](#no-ci) · [Documentação](docs)
 
 <br>
 

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>liveflow: o fluxo de tela de cada card, testado antes de entregar</title>
+<meta name="description" content="Extensão do VS Code e CLI que testa o passo a passo de cada card na tela, sempre do mesmo jeito, antes de entregar. A IA escreve os passos; o liveflow executa.">
+<meta property="og:title" content="liveflow">
+<meta property="og:description" content="O fluxo de tela de cada card, testado antes de entregar.">
+<meta property="og:image" content="imagens/04-execucao-ao-vivo.png">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --papel: #F2F4F1;
+    --papel-2: #E7EBE6;
+    --tinta: #15171C;
+    --texto: #4E5662;
+    --linha: #D3D9D2;
+    --verde: #17945F;
+    --verde-claro: #D7EEE1;
+    --ambar: #B7791F;
+    --titulo: "Bricolage Grotesque", system-ui, sans-serif;
+    --corpo: "Instrument Sans", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--papel); color: var(--tinta); font: 400 17px/1.6 var(--corpo); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--verde); outline-offset: 3px; border-radius: 4px; }
+  .largura { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+  header.topo { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+  .marca { display: flex; align-items: center; gap: 10px; font: 700 22px/1 var(--titulo); letter-spacing: -0.02em; text-decoration: none; }
+  .marca img { width: 34px; height: 34px; }
+  nav.links { display: flex; gap: 22px; font-weight: 500; font-size: 15px; }
+  nav.links a { text-decoration: none; color: var(--texto); }
+  nav.links a:hover { color: var(--tinta); }
+
+  .heroi { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; padding: 56px 0 88px; }
+  h1 { font: 700 clamp(40px, 5.6vw, 68px)/1.02 var(--titulo); letter-spacing: -0.035em; margin: 0 0 22px; max-width: 13ch; }
+  .heroi p.sub { font-size: 19px; color: var(--texto); max-width: 46ch; margin: 0 0 32px; }
+  .acoes { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 20px; border-radius: 10px; font: 600 16px/1 var(--corpo); text-decoration: none; border: 1.5px solid var(--tinta); }
+  .btn.pri { background: var(--tinta); color: #fff; }
+  .btn.pri:hover { background: #2A2E36; }
+  .btn.sec:hover { background: var(--papel-2); }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .nota { margin-top: 16px; font-size: 14px; color: var(--texto); }
+
+  /* o card rodando */
+  .execucao { background: #fff; border: 1.5px solid var(--tinta); border-radius: 18px; box-shadow: 10px 10px 0 var(--tinta); overflow: hidden; }
+  .execucao .cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1.5px solid var(--linha); }
+  .execucao .cab b { font: 700 17px/1.3 var(--titulo); letter-spacing: -0.01em; }
+  .execucao .cab small { display: block; color: var(--texto); font-size: 13px; font-weight: 400; margin-top: 2px; font-family: var(--mono); }
+  .selo { flex: none; font-size: 13px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: var(--papel-2); color: var(--texto); transition: background .3s, color .3s; }
+  .selo.ok { background: var(--verde-claro); color: #0E6B44; }
+  ol.passos { list-style: none; margin: 0; padding: 8px 20px 16px; }
+  ol.passos li { display: grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--papel-2); font-size: 15px; }
+  ol.passos li:last-child { border-bottom: 0; }
+  ol.passos .crit { font-size: 12px; color: var(--texto); }
+  .bola { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--linha); display: grid; place-items: center; transition: background .25s, border-color .25s; }
+  .bola svg { width: 12px; height: 12px; opacity: 0; transition: opacity .2s; }
+  li.ok .bola { background: var(--verde); border-color: var(--verde); }
+  li.ok .bola svg { opacity: 1; }
+  li.rodando .bola { border-color: var(--verde); border-width: 3px; }
+  .rodape-exec { display: flex; justify-content: space-between; gap: 12px; padding: 12px 20px; background: var(--papel); border-top: 1.5px solid var(--linha); font-size: 13px; color: var(--texto); }
+  .tentativas { display: flex; gap: 6px; align-items: center; }
+  .tentativas i { width: 10px; height: 10px; border-radius: 3px; background: var(--linha); transition: background .3s; }
+  .tentativas i.ok { background: var(--verde); }
+
+  section { padding: 88px 0; border-top: 1.5px solid var(--linha); }
+  h2 { font: 700 clamp(30px, 3.6vw, 44px)/1.08 var(--titulo); letter-spacing: -0.03em; margin: 0 0 16px; max-width: 22ch; }
+  .intro { color: var(--texto); font-size: 18px; max-width: 60ch; margin: 0 0 48px; }
+
+  .etapas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 36px; counter-reset: etapa; }
+  .etapa { counter-increment: etapa; }
+  .etapa::before { content: counter(etapa); display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--tinta); font: 700 18px/1 var(--titulo); margin-bottom: 18px; }
+  .etapa h3 { font: 700 21px/1.25 var(--titulo); letter-spacing: -0.01em; margin: 0 0 8px; }
+  .etapa p { margin: 0; color: var(--texto); }
+  pre.yaml { margin: 48px 0 0; background: var(--tinta); color: #E4E7EB; border-radius: 14px; padding: 24px 26px; font: 400 14px/1.7 var(--mono); overflow-x: auto; }
+  pre.yaml .c { color: #8A93A0; }
+  pre.yaml .k { color: #7FD3A8; }
+
+  .telas { display: grid; gap: 36px; }
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 12px; border: 1.5px solid var(--tinta); }
+  figcaption { font-size: 15px; color: var(--texto); margin-top: 12px; }
+  .telas .coluna { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+
+  .garantias { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 56px; }
+  .garantia { padding: 22px 0; border-bottom: 1px solid var(--linha); display: grid; grid-template-columns: 28px 1fr; gap: 14px; }
+  .garantia svg { width: 22px; height: 22px; margin-top: 3px; }
+  .garantia b { display: block; font: 700 18px/1.3 var(--titulo); margin-bottom: 4px; }
+  .garantia span { color: var(--texto); font-size: 16px; }
+
+  .instalar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .modo { border: 1.5px solid var(--tinta); border-radius: 16px; padding: 26px; background: #fff; display: flex; flex-direction: column; }
+  .modo h3 { font: 700 21px/1.2 var(--titulo); margin: 0 0 6px; }
+  .modo p { margin: 0 0 18px; color: var(--texto); font-size: 15px; }
+  .cmd { position: relative; background: var(--papel); border: 1px solid var(--linha); border-radius: 10px; padding: 12px 44px 12px 14px; font: 400 13px/1.55 var(--mono); word-break: break-all; margin-bottom: 10px; }
+  .cmd button { position: absolute; top: 8px; right: 8px; border: 0; background: transparent; cursor: pointer; padding: 4px; border-radius: 6px; color: var(--texto); }
+  .cmd button:hover { background: var(--papel-2); color: var(--tinta); }
+  .cmd button svg { width: 16px; height: 16px; display: block; }
+  .modo .btn { margin-top: auto; align-self: flex-start; }
+  .requisito { margin-top: 28px; font-size: 15px; color: var(--texto); }
+
+  footer { border-top: 1.5px solid var(--linha); padding: 36px 0 56px; color: var(--texto); font-size: 15px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  footer nav { display: flex; gap: 20px; }
+
+  .aviso-copiado { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); background: var(--tinta); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; }
+  .aviso-copiado.ver { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 900px) {
+    .heroi, .telas .coluna { grid-template-columns: 1fr; }
+    .etapas, .instalar { grid-template-columns: 1fr; }
+    .garantias { grid-template-columns: 1fr; }
+    nav.links a.opcional { display: none; }
+    .heroi { padding-top: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+<div class="largura">
+  <header class="topo">
+    <a class="marca" href="#"><img src="logo.svg" alt="">liveflow</a>
+    <nav class="links">
+      <a class="opcional" href="#como-funciona">Como funciona</a>
+      <a class="opcional" href="#instalar">Instalar</a>
+      <a href="https://github.com/joaocarpim/live-flow">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="heroi">
+      <div>
+        <h1>Cada card testado na tela, antes de entregar.</h1>
+        <p class="sub">O liveflow abre o sistema na branch do card e segue o passo a passo, clique por clique, sempre do mesmo jeito. Você assiste ao vivo no VS Code e sabe exatamente qual passo falhou.</p>
+        <div class="acoes">
+          <a class="btn pri" href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.liveflow-cards">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
+            Instalar no VS Code
+          </a>
+          <a class="btn sec" href="https://github.com/joaocarpim/live-flow">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 2.9.8.1-.6.4-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7c-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>
+            Ver no GitHub
+          </a>
+        </div>
+        <p class="nota">Grátis e de código aberto (MIT). Também roda pelo terminal e no CI.</p>
+      </div>
+
+      <div class="execucao" aria-label="Exemplo de um card sendo testado">
+        <div class="cab">
+          <div><b>C-07 · Cliente aceita o orçamento</b><small>feat/aceite · a1f9c3e</small></div>
+          <span class="selo" id="selo">rodando</span>
+        </div>
+        <ol class="passos" id="passos">
+          <li><span class="bola"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span>abrir /orcamentos/1042<span class="crit"></span></li>
+          <li><span class="bola"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span>ver "Total R$ 4.380,00"<span class="crit">critério 1</span></li>
+          <li><span class="bola"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span>clicar em "Aceitar orçamento"<span class="crit"></span></li>
+          <li><span class="bola"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span>ver "Orçamento aprovado"<span class="crit">critério 2</span></li>
+          <li><span class="bola"><svg viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.5l4.5-5"/></svg></span>receber o e-mail de confirmação<span class="crit">critério 3</span></li>
+        </ol>
+        <div class="rodape-exec">
+          <span>banco zerado antes de cada tentativa</span>
+          <span class="tentativas" aria-label="tentativas"><i></i><i></i><i></i></span>
+        </div>
+      </div>
+    </div>
+
+    <section id="como-funciona">
+      <h2>A IA escreve os passos. O liveflow executa.</h2>
+      <p class="intro">Nada de teste que muda de resultado sozinho: quem roda é o liveflow, sem IA, e sempre do mesmo jeito. O Claude só escreve.</p>
+      <div class="etapas">
+        <div class="etapa">
+          <h3>Você passa os seus cards</h3>
+          <p>Cole os cards do seu quadro: título, critérios e a branch onde foram feitos. O liveflow levanta o projeto sozinho (repositórios, scripts, tecnologias).</p>
+        </div>
+        <div class="etapa">
+          <h3>O Claude escreve o artefato</h3>
+          <p>Ele lê o código e escreve <code>.liveflow/cards.yaml</code>: como subir o sistema e o passo a passo de cada card, com os textos reais da tela.</p>
+        </div>
+        <div class="etapa">
+          <h3>O liveflow testa, card por card</h3>
+          <p>Sobe o sistema na branch de cada card, zera o banco e segue os passos. Falha só conta depois de 3 de 3 tentativas.</p>
+        </div>
+      </div>
+<pre class="yaml"><span class="c"># .liveflow/cards.yaml</span>
+<span class="k">cards:</span>
+  - <span class="k">id:</span> C-07
+    <span class="k">titulo:</span> Cliente aceita o orçamento pelo link
+    <span class="k">branch:</span> feat/aceite
+    <span class="k">criterios:</span>
+      - O cliente vê o valor total
+      - Ao aceitar, o orçamento fica aprovado
+    <span class="k">como_testar:</span>
+      - <span class="k">abrir:</span> /orcamentos/1042
+      - <span class="k">ver_texto:</span> "Total R$ 4.380,00"
+        <span class="k">criterio:</span> 1
+      - <span class="k">clicar:</span> Aceitar orçamento
+      - <span class="k">ver_texto:</span> Orçamento aprovado
+        <span class="k">criterio:</span> 2</pre>
+    </section>
+
+    <section>
+      <h2>Você assiste o teste acontecer.</h2>
+      <p class="intro">Com vários cards, eles rodam um por vez, e a tela de cada um aparece no painel do VS Code. Quando um passo falha, você vê o print, o critério que caiu e os botões parecidos que existem na tela.</p>
+      <div class="telas">
+        <figure>
+          <img src="imagens/04-execucao-ao-vivo.png" alt="Painel do liveflow no VS Code mostrando a tela do sistema e o passo a passo do card sendo executado">
+          <figcaption>Ao vivo: a tela do sistema e o passo atual.</figcaption>
+        </figure>
+        <div class="coluna">
+          <figure>
+            <img src="imagens/06-resultados.png" alt="Resultados com cards que passaram, falharam e não rodaram">
+            <figcaption>Resultados: passou, falhou confirmado, instável ou não rodou, sempre com o motivo.</figcaption>
+          </figure>
+          <figure>
+            <img src="imagens/03-blocos.png" alt="Cards agrupados em blocos por branch">
+            <figcaption>Blocos: um sistema no ar por branch, e a ordem certa entre cards dependentes.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>O que o liveflow garante.</h2>
+      <p class="intro">Um resultado só vale se dá para confiar nele. Por isso algumas regras não mudam.</p>
+      <div class="garantias">
+        <div class="garantia"><svg viewBox="0 0 24 24" fill="none" stroke="#17945F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6"/></svg><div><b>Sabe qual código testou</b><span>Cada resultado registra a branch e o commit. Sem essa certeza, o card fica "não rodou", com o motivo.</span></div></div>
+        <div class="garantia"><svg viewBox="0 0 24 24" fill="none" stroke="#17945F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6"/></svg><div><b>Repete antes de acusar</b><span>Falha é 3 de 3 tentativas, com o banco zerado em cada uma. Falhou e depois passou vira instável, sem bloquear ninguém.</span></div></div>
+        <div class="garantia"><svg viewBox="0 0 24 24" fill="none" stroke="#17945F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6"/></svg><div><b>Nunca chuta</b><span>Se um texto bate com dois botões, é falha por ambiguidade. Ele não clica no primeiro que aparecer.</span></div></div>
+        <div class="garantia"><svg viewBox="0 0 24 24" fill="none" stroke="#17945F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6"/></svg><div><b>Produção nunca é alvo</b><span>Só abre os endereços permitidos no artefato. O domínio de produção fica bloqueado, mesmo por engano.</span></div></div>
+        <div class="garantia"><svg viewBox="0 0 24 24" fill="none" stroke="#17945F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6"/></svg><div><b>Senha não vai para arquivo</b><span>Segredos ficam no cofre do VS Code ou em variáveis de ambiente. O artefato e os textos para o Claude levam só o nome.</span></div></div>
+        <div class="garantia"><svg viewBox="0 0 24 24" fill="none" stroke="#17945F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6"/></svg><div><b>Seu checkout fica intacto</b><span>Cada branch roda numa cópia separada, apagada no fim. Funciona com um repositório ou com uma pasta que junta vários.</span></div></div>
+      </div>
+    </section>
+
+    <section id="instalar">
+      <h2>Instalar.</h2>
+      <p class="intro">Escolha por onde usar. Os três falam com o mesmo artefato.</p>
+      <div class="instalar">
+        <div class="modo">
+          <h3>VS Code</h3>
+          <p>A extensão com as telas: cards, blocos, execução ao vivo, resultados e o cofre de segredos.</p>
+          <div class="cmd"><span>code --install-extension JooVitorAparecidoCarpimdeSouza.liveflow-cards</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <a class="btn pri" href="https://marketplace.visualstudio.com/items?itemName=JooVitorAparecidoCarpimdeSouza.liveflow-cards">Abrir no Marketplace</a>
+        </div>
+        <div class="modo">
+          <h3>Terminal e CI</h3>
+          <p>A CLI no projeto, para rodar os cards da branch antes do push ou no pull request.</p>
+          <div class="cmd"><span>npm i -D github:joaocarpim/live-flow playwright</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <div class="cmd"><span>npx liveflow rodar --da-branch</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <a class="btn sec" href="https://github.com/joaocarpim/live-flow/blob/main/docs/comandos.md">Ver os comandos</a>
+        </div>
+        <div class="modo">
+          <h3>Claude Code</h3>
+          <p>O plugin ensina o Claude a escrever o artefato e a corrigir o que falhou, sem nunca rodar o teste ele mesmo.</p>
+          <div class="cmd"><span>claude plugin marketplace add joaocarpim/live-flow</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <div class="cmd"><span>claude plugin install liveflow@liveflow</span><button type="button" aria-label="Copiar comando"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+          <a class="btn sec" href="https://github.com/joaocarpim/live-flow/blob/main/docs/claude.md">Como usar com o Claude</a>
+        </div>
+      </div>
+      <p class="requisito">Precisa de Node 22.18 ou mais novo e do Playwright no projeto testado. Sem o Chromium do Playwright, o liveflow usa o Google Chrome instalado. Prefere instalar à mão? Baixe o <a href="https://github.com/joaocarpim/live-flow/releases/latest">.vsix da última versão</a>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <span>liveflow · código aberto, licença MIT</span>
+    <nav>
+      <a href="https://github.com/joaocarpim/live-flow">Repositório</a>
+      <a href="https://github.com/joaocarpim/live-flow/tree/main/docs">Documentação</a>
+      <a href="https://github.com/joaocarpim/live-flow/blob/main/CHANGELOG.md">Novidades</a>
+    </nav>
+  </footer>
+</div>
+<div class="aviso-copiado" id="copiado" role="status" aria-live="polite"></div>
+
+<script>
+  // o card do topo: os passos ficam verdes um a um, depois as 3 tentativas, e o selo vira "passou 3/3"
+  (function () {
+    const itens = [...document.querySelectorAll('#passos li')];
+    const quadradinhos = [...document.querySelectorAll('.tentativas i')];
+    const selo = document.getElementById('selo');
+    const fim = () => { itens.forEach((li) => { li.classList.remove('rodando'); li.classList.add('ok'); }); quadradinhos.forEach((q) => q.classList.add('ok')); selo.textContent = 'passou 3/3'; selo.classList.add('ok'); };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return fim();
+    let i = 0;
+    const passo = () => {
+      if (i > 0) { itens[i - 1].classList.remove('rodando'); itens[i - 1].classList.add('ok'); }
+      if (i < itens.length) { itens[i].classList.add('rodando'); i++; return setTimeout(passo, 650); }
+      quadradinhos.forEach((q, n) => setTimeout(() => q.classList.add('ok'), 250 * (n + 1)));
+      setTimeout(fim, 1000);
+    };
+    setTimeout(passo, 500);
+  })();
+
+  // copiar comandos
+  const aviso = document.getElementById('copiado');
+  document.querySelectorAll('.cmd button').forEach((b) => b.addEventListener('click', async () => {
+    const texto = b.previousElementSibling.textContent;
+    try { await navigator.clipboard.writeText(texto); aviso.textContent = 'Comando copiado'; }
+    catch { aviso.textContent = 'Não deu para copiar: selecione o texto'; }
+    aviso.classList.add('ver');
+    setTimeout(() => aviso.classList.remove('ver'), 1600);
+  }));
+</script>
+</body>
+</html>

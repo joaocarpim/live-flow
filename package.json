@@ -1,6 +1,6 @@
 {
   "name": "liveflow",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Testa o fluxo de tela de cada card, em blocos, antes de entregar. Determinístico: a IA escreve, o liveflow executa.",
   "type": "module",
   "license": "MIT",
@@ -34,7 +34,7 @@
     "type": "git",
     "url": "git+https://github.com/joaocarpim/live-flow.git"
   },
-  "homepage": "https://github.com/joaocarpim/live-flow#readme",
+  "homepage": "https://joaocarpim.github.io/live-flow/",
   "bugs": {
     "url": "https://github.com/joaocarpim/live-flow/issues"
   },
