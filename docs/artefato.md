@@ -42,6 +42,30 @@ sistema:
 - Cada processo recebe `PORT`, `LIVEFLOW_PORTA_<NOME>` e `LIVEFLOW_URL_<NOME>`.
 - Serviço com `repo:` usa a branch de mesmo nome naquele repositório; sem ela, usa a `base` dele (ou `sistema.base`) e o resultado registra isso.
 
+### Pasta raiz que junta vários repositórios
+
+Se a pasta aberta no VS Code (onde fica `.liveflow/`) não é um repositório git, o liveflow procura os repositórios nas subpastas (até 3 níveis, sem entrar em `node_modules`). Exemplo:
+
+```
+reidseg/            ← pasta raiz, sem git, com .liveflow/cards.yaml
+  frontend/         ← repositório
+  backend/          ← repositório
+```
+
+```yaml
+sistema:
+  url: http://localhost:{{porta.web}}
+  servicos:
+    - { nome: api, iniciar: "npm start -- --port {{porta}}", repo: backend, saude: /saude }
+    - { nome: web, iniciar: "npm run dev -- --port {{porta}}", repo: frontend }
+```
+
+- Cada serviço roda numa cópia do repositório dele, na branch do card; quem não tem a branch usa a base (anotado).
+- Se a branch do card não existe em nenhum dos repositórios usados, o card fica "não rodou": o teste seria só da base.
+- Serviço sem `repo:`: com um repositório só, usa ele; com vários, usa o único que tiver a branch do card. Se a branch estiver em mais de um, o card não roda e pede o `repo:`.
+- `arquivos` dos cards ficam com o caminho a partir da raiz (`frontend/src/...`).
+- O `seed` roda na cópia do primeiro serviço.
+
 ## `variaveis`
 
 Textos reaproveitados nos passos com `{{nome}}`. Valores guardados durante o fluxo (`guardar`, `api.guardar`, `ver_email.guardar_link`) entram no mesmo lugar.

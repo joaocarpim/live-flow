@@ -45,7 +45,7 @@ export async function alvosDasBranches(repo: string, base: string, branches: str
   const saida: AlvoBranch[] = [];
   for (const nome of branches) {
     const info = conhecidas.find((b) => b.nome === nome);
-    if (!info) throw new Error(`Branch não encontrada: ${nome}. Para remotas, use "liveflow branches --atualizar" antes.`);
+    if (!info) throw new Error(`Branch não encontrada: ${nome}. Para remotas, rode "git fetch" antes.`);
     const arquivos = (await arquivosMudados(repo, base, nome)).map((a) => a.caminho);
     const commits = await commitsDaBranch(repo, base, nome);
     const cards = vincular(info, arquivos, todos);

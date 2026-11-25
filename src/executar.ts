@@ -5,7 +5,8 @@ import { existsSync, readFileSync, symlinkSync, writeFileSync, mkdirSync } from 
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { arquivosMudados, branchAtual, criarCopia, ehRepositorio, git, SEM_GIT, shaDe } from './git.ts';
+import { branchAtual, criarCopia, git, shaDe } from './git.ts';
+import { arquivosDaBranch, branchesAtuais, lerRaiz, reposComBranch, SEM_GIT, type Raiz } from './repositorios.ts';
 import { globParaRegex } from './fontes.ts';
 import type { AlvoCard } from './fontes.ts';
 import type { Bloco } from './blocos.ts';
@@ -86,7 +87,10 @@ export function matarArvore(p: ReturnType<typeof spawn>, sinal: NodeJS.Signals =
 }
 
 export interface OpcoesExecucao {
+  /** Pasta raiz (onde fica .liveflow/). Pode ser o repositório ou uma pasta que junta repositórios. */
   repo: string;
+  /** Preenchido pelo executar: onde estão os repositórios. */
+  raiz?: Raiz;
   artefato: Artefato;
   blocos: Bloco[];
   aoVivo: boolean;
@@ -111,7 +115,8 @@ export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
   o.registro.emitir('execucao_inicio', { blocos: o.blocos.map((b) => ({ branch: b.branch, ondas: b.ondas.map((on) => on.map((c) => c.card.id)) })), modo: o.modo, aoVivo, paralelo: aoVivo ? 1 : sistema.paralelo });
   const resultados = new Map<string, ResultadoCard>();
   // sem git não dá para saber qual código foi testado: nenhum card roda, e o motivo diz o que fazer
-  if (!(await ehRepositorio(o.repo))) {
+  o.raiz = await lerRaiz(o.repo);
+  if (!o.raiz.repos.length) {
     for (const [i, bloco] of o.blocos.entries()) {
       for (const c of bloco.ondas.flat()) {
         const pasta = join(o.pasta, c.card.id);
@@ -124,7 +129,7 @@ export async function executar(o: OpcoesExecucao): Promise<ResultadoCard[]> {
     }
   } else {
     // cópias de execuções interrompidas (Ctrl+C, máquina desligada) somem do registro do git
-    await git(o.repo, ['worktree', 'prune']).catch(() => undefined);
+    for (const rep of o.raiz.repos) await git(resolve(o.repo, rep), ['worktree', 'prune']).catch(() => undefined);
     for (const [i, bloco] of o.blocos.entries()) await executarBloco(o, bloco, i + 1, vivo, resultados);
   }
   const lista = [...resultados.values()];
@@ -163,9 +168,10 @@ async function executarBloco(o: OpcoesExecucao, bloco: Bloco, n: number, vivo: S
         return todosNaoRodaram((e as Error).message);
       }
     } else if (bloco.branch) {
-      const atual = await branchAtual(o.repo);
+      const atuais = o.raiz?.raizEhRepo === false ? await branchesAtuais(o.repo) : [await branchAtual(o.repo)].filter((b): b is string => !!b);
       const semRemoto = bloco.branch.replace(/^[^/]+\//, '');
-      if (atual !== bloco.branch && atual !== semRemoto) {
+      const atual = atuais.join(', ') || undefined;
+      if (!atuais.some((a) => a === bloco.branch || a === semRemoto)) {
         return todosNaoRodaram(`O sistema em ${sistema.url} roda o seu checkout atual (${atual ?? 'sem branch'}), não ${bloco.branch}. Configure sistema.iniciar para o liveflow subir a branch certa, ou faça checkout de ${bloco.branch}.`);
       }
     }
@@ -360,20 +366,34 @@ async function subirServicos(o: OpcoesExecucao, sistema: Sistema, ref: string, r
     for (const sv of sistema.servicos) portas.set(sv.nome, await portaLivre());
     const preparados: { sv: Servico; dir: string }[] = [];
     const codigo: CodigoUsado[] = [];
+    const raiz = o.raiz ?? (await lerRaiz(o.repo));
+    // raiz que só junta repositórios: cada serviço roda no repositório dele
+    const pastaDeRepos = !raiz.raizEhRepo && !usarPasta;
+    const comBranch = pastaDeRepos && ref !== 'HEAD' ? await reposComBranch(o.repo, raiz, ref) : [];
     for (const sv of sistema.servicos) {
-      const repoDir = sv.repo ? resolve(o.repo, sv.repo) : o.repo;
+      let repoRel = sv.repo;
+      if (pastaDeRepos && !repoRel) {
+        if (raiz.repos.length === 1) repoRel = raiz.repos[0]!;
+        else if (comBranch.length === 1) repoRel = comBranch[0]!;
+        else throw new ErroAmbiente(`O serviço ${sv.nome} não diz em qual repositório roda. A pasta ${o.repo} junta ${raiz.repos.length} repositórios (${raiz.repos.join(', ')})${comBranch.length > 1 ? ` e ${ref} existe em ${comBranch.join(', ')}` : ''}. Coloque "repo: <pasta>" no serviço em sistema.servicos.`);
+      }
+      const repoDir = repoRel ? resolve(o.repo, repoRel) : o.repo;
       if (usarPasta) {
         codigo.push({ servico: sv.nome, repo: sv.repo ?? '.', ref: 'pasta atual', sha: 'sem-git', observacao: 'sem git: usei o código da pasta como está' });
         preparados.push({ sv, dir: repoDir });
         continue;
       }
-      const alvo = sv.repo ? await refNoOutroRepo(repoDir, ref, sv.base ?? sistema.base) : { ref };
+      const alvo = repoRel ? await refNoOutroRepo(repoDir, ref, sv.base ?? sistema.base) : { ref };
       const copia = await criarCopia(repoDir, alvo.ref);
       copias.push(copia);
-      codigo.push({ servico: sv.nome, repo: sv.repo ?? '.', ref: alvo.ref, sha: copia.sha, ...(alvo.observacao ? { observacao: alvo.observacao } : {}) });
+      codigo.push({ servico: sv.nome, repo: repoRel ?? '.', ref: alvo.ref, sha: copia.sha, ...(alvo.observacao ? { observacao: alvo.observacao } : {}) });
       const dep = await prepararCopia(repoDir, copia.dir, sv.preparar ?? (sv.repo ? undefined : sistema.preparar), sistema.reaproveitarDependencias);
       o.registro.emitir('copia_pronta', { bloco: rotulo, servico: sv.nome, ref: alvo.ref, sha: copia.sha, dependencias: dep, ...(alvo.observacao ? { observacao: alvo.observacao } : {}) });
       preparados.push({ sv, dir: copia.dir });
+    }
+    // pasta de repositórios: se nenhum serviço achou a branch do card, o teste seria só da base. Não roda.
+    if (pastaDeRepos && ref !== 'HEAD' && ref !== sistema.base && codigo.every((c) => c.observacao)) {
+      throw new ErroAmbiente(`A branch ${ref} não existe em nenhum dos repositórios usados (${[...new Set(codigo.map((c) => c.repo))].join(', ')}). Sem ela, o teste seria só do código da base. Confira o "branch:" do card ou faça git fetch nesses repositórios.`);
     }
     const env: Record<string, string> = {};
     for (const [n, p] of portas) {
@@ -454,7 +474,7 @@ export function acharVizinhos(cardId: string, arquivosDaBranch: string[], todos:
 async function testarVizinhos(o: OpcoesExecucao, alvo: AlvoCard, url: string, app: AppNoAr | null, pasta: string): Promise<ResultadoVizinho[]> {
   const { sistema } = o.artefato;
   const ref = alvo.branch ?? 'HEAD';
-  const arquivos = (await arquivosMudados(o.repo, sistema.base, ref)).map((a) => a.caminho);
+  const arquivos = await arquivosDaBranch(o.repo, sistema.base, ref);
   const vizinhos = acharVizinhos(alvo.card.card.id, arquivos, o.artefato.cards);
   const saida: ResultadoVizinho[] = [];
   for (const v of vizinhos) {
@@ -491,8 +511,9 @@ export async function subirParaUso(repo: string, artefato: Artefato, ref: string
   if (!artefato.sistema.servicos.length) return { url: artefato.sistema.url, parar: async () => undefined };
   const o = { repo, artefato, blocos: [], aoVivo: false, modo: 'rapido', registro, pasta: '' } as OpcoesExecucao;
   // gravar não afirma resultado: sem git, sobe o app direto na pasta (e avisa)
-  const semGit = !(await ehRepositorio(repo));
+  o.raiz = await lerRaiz(repo);
+  const semGit = !o.raiz.repos.length;
   const app = await subirServicos(o, artefato.sistema, ref, 'gravação', semGit);
   await zerarBanco(artefato.sistema, app.dir, 'gravacao', app.url);
-  return { url: app.url, parar: app.parar, ...(semGit ? { aviso: 'Esta pasta não é um repositório git: o app subiu com o código da pasta como está, não com a branch do card.' } : {}) };
+  return { url: app.url, parar: app.parar, ...(semGit ? { aviso: 'Não achei repositório git nesta pasta nem nas subpastas: o app subiu com o código da pasta como está, não com a branch do card.' } : {}) };
 }

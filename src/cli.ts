@@ -1,12 +1,12 @@
 // liveflow: CLI. A extensão do VS Code vai chamar estes mesmos comandos e ler o mesmo events.ndjson.
 import { parseArgs } from 'node:util';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { stringify } from 'yaml';
 import { carregarArtefato, CAMINHO_ARTEFATO } from './artefato.ts';
 import { alvosDasBranches } from './fontes.ts';
 import { montarBlocos, descreverBlocos } from './blocos.ts';
-import { arquivosMudados, branchAtual } from './git.ts';
+import { arquivosDaBranch, branchesAtuais, lerRaiz, reposComBranch } from './repositorios.ts';
 import { montarPlano } from './plano.ts';
 import type { Modo } from './plano.ts';
 import { promptArtefato, promptPassos, promptResolver } from './prompts.ts';
@@ -97,7 +97,7 @@ async function main(): Promise<number> {
     case 'plano': {
       const c = art.cards.find((x) => x.card.id === args[0]);
       if (!c) throw new Error(`Card ${args[0] ?? '(nenhum)'} não encontrado.`);
-      const arquivos = c.card.branch ? (await arquivosMudados(repo, art.sistema.base, c.card.branch).catch(() => [])).map((a) => a.caminho) : [];
+      const arquivos = c.card.branch ? await arquivosDaBranch(repo, art.sistema.base, c.card.branch).catch(() => []) : [];
       const plano = montarPlano({ card: c.card, arquivos, modo });
       const rotulo = { vai_rodar: 'vai rodar', nao_se_aplica: 'não se aplica', outro_modo: 'outro modo', ainda_nao_implementada: 'ainda não roda' } as const;
       saida(plano.map((p) => ({ camada: p.camada.id, estado: p.estado, motivo: p.motivo })), () => {
@@ -120,9 +120,10 @@ async function main(): Promise<number> {
       if (op.todos) ids = prontos.map((c) => c.card.id);
       else if (op.regressao) ids = prontos.filter((c) => c.card.entregue).map((c) => c.card.id);
       else if (op['da-branch']) {
-        const atual = op['branch-atual'] || (await branchAtual(repo));
-        if (!atual) throw new Error('Não estou em nenhuma branch (HEAD solto). Use --branch-atual nome.');
-        ids = prontos.filter((c) => !c.card.entregue && c.card.branch && (c.card.branch === atual || c.card.branch.replace(/^origin\//, '') === atual)).map((c) => c.card.id);
+        const atuais = op['branch-atual'] ? [op['branch-atual']] : await branchesAtuais(repo);
+        if (!atuais.length) throw new Error('Não estou em nenhuma branch (HEAD solto). Use --branch-atual nome.');
+        const atual = atuais.join(', ');
+        ids = prontos.filter((c) => !c.card.entregue && c.card.branch && atuais.some((a) => c.card.branch === a || c.card.branch!.replace(/^origin\//, '') === a)).map((c) => c.card.id);
         if (!ids.length) {
           console.log(`Nenhum card pronto da branch ${atual}. Nada a testar.`);
           return 0;
@@ -155,7 +156,8 @@ async function main(): Promise<number> {
       if (tipo === 'passos') {
         const c = art.cards.find((x) => x.card.id === id);
         if (!c) throw new Error(`Card ${id ?? '(nenhum)'} não encontrado.`);
-        const ctx = c.card.branch ? (await alvosDasBranches(repo, art.sistema.base, [c.card.branch], art.cards).catch(() => []))[0] : undefined;
+        const repoDaBranch = c.card.branch ? (await reposComBranch(repo, await lerRaiz(repo), c.card.branch))[0] : undefined;
+        const ctx = c.card.branch && repoDaBranch ? (await alvosDasBranches(resolve(repo, repoDaBranch), art.sistema.base, [c.card.branch], art.cards).catch(() => []))[0] : undefined;
         console.log(promptPassos(c.card, ctx));
       } else if (tipo === 'artefato') {
         const texto = op.de ? readFileSync(op.de, 'utf8') : '';

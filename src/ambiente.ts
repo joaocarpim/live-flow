@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { verificarAlvo } from './seguranca.ts';
 import type { Artefato } from './tipos.ts';
 import { CAMINHO_ARTEFATO } from './artefato.ts';
-import { ehRepositorio } from './git.ts';
+import { lerRaiz } from './repositorios.ts';
 
 const exec = promisify(execFile);
 
@@ -25,8 +25,13 @@ export async function diagnosticar(repo: string, art: Artefato): Promise<{ itens
   const itens: ItemAmbiente[] = [];
   const temArtefato = existsSync(join(repo, CAMINHO_ARTEFATO));
   itens.push({ nome: 'Artefato de cards', ok: temArtefato && !art.problemas.length, detalhe: temArtefato ? (art.problemas[0] ?? CAMINHO_ARTEFATO) : 'não existe', ...(temArtefato ? {} : { resolver: 'liveflow iniciar' }) });
-  const temGit = await ehRepositorio(repo);
-  itens.push({ nome: 'Repositório git', ok: temGit, detalhe: temGit ? 'ok' : 'a pasta não é um repositório git com commits: sem ele nenhum card roda', ...(temGit ? {} : { resolver: 'git init && git add -A && git commit -m "inicial"' }) });
+  const raiz = await lerRaiz(repo);
+  const temGit = raiz.repos.length > 0;
+  itens.push({ nome: 'Repositório git', ok: temGit, detalhe: raiz.raizEhRepo ? 'ok' : temGit ? `pasta com ${raiz.repos.length} repositório(s): ${raiz.repos.join(', ')}` : 'nenhum repositório git nesta pasta nem nas subpastas: sem ele nenhum card roda', ...(temGit ? {} : { resolver: 'git init && git add -A && git commit -m "inicial"' }) });
+  if (!raiz.raizEhRepo && raiz.repos.length > 1) {
+    const semRepo = (art?.sistema.servicos ?? []).filter((s) => !s.repo).map((s) => s.nome);
+    if (semRepo.length) itens.push({ nome: 'Repositório de cada serviço', ok: false, opcional: true, detalhe: `sem "repo:" (${semRepo.join(', ')}): o liveflow usa o único repositório que tiver a branch do card; se houver mais de um, o card não roda`, resolver: `repo: ${raiz.repos[0]}` });
+  }
   let pw = '';
   try {
     pw = createRequire(join(repo, 'package.json')).resolve('playwright');

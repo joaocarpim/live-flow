@@ -227,7 +227,7 @@ test('gravar numa pasta sem git sobe o app na própria pasta e avisa', async () 
   const amb = await subirParaUso(dir, art, 'feat/aceite', new Registro(join(dir, 'ev.ndjson')));
   try {
     assert.equal(await (await fetch(amb.url)).text(), 'pasta');
-    assert.match(amb.aviso!, /não é um repositório git/);
+    assert.match(amb.aviso!, /Não achei repositório git/);
   } finally {
     await amb.parar();
   }

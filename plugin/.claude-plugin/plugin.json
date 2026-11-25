@@ -1,6 +1,6 @@
 {
   "name": "liveflow",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Escreve cards e passo a passo para o liveflow, roda os testes e corrige falhas confirmadas. A IA escreve; o liveflow executa sem IA.",
   "author": {
     "name": "João Carpim"

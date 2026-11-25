@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9 (2026-11-25)
+
+- Pasta raiz que junta vários repositórios (ex.: `reidseg/frontend` e `reidseg/backend`): quando a pasta aberta não é um repositório git, o liveflow procura os repositórios nas subpastas (até 3 níveis, sem `node_modules`). Cada serviço roda no repositório dele (`repo: frontend`); sem `repo:`, usa o único repositório ou o único que tem a branch do card. A aba Ambiente mostra os repositórios achados.
+- Branch do card ausente em todos os repositórios usados: o card fica "não rodou" (o teste seria só da base).
+
 ## 0.1.8 (2026-11-24)
 
 - A aba Ambiente não mostra mais o quadro "Automatizar" (hook de pre-push e GitHub Actions). Os comandos continuam na CLI (`liveflow hook instalar`, `liveflow ci gerar`) para quem quiser.
